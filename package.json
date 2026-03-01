@@ -1,0 +1,29 @@
+{
+  "name": "satkey",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.0.0",
+    "lint-staged": "^15.0.0",
+    "turbo": "^2.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "pnpm lint",
+      "pnpm typecheck"
+    ]
+  },
+  "keywords": [],
+  "author": "ShauryaSwarup",
+  "license": "ISC",
+  "packageManager": "pnpm@10.30.3"
+}
