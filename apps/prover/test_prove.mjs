@@ -82,14 +82,25 @@ try {
   console.log("✅ nargo execute succeeded");
 
   // 6. bb prove_ultra_keccak_honk
-  console.log("\n--- Running bb prove_ultra_keccak_honk ---");
-  const outFile = "/tmp/bb_test_proof";
+  console.log("\n--- Running bb prove ---");
+  const outDir = "/tmp";
   execSync(
-    `${BB} prove_ultra_keccak_honk -b ${path.join(CIRCUIT_DIR, "target", "satkey_auth.json")} -w ${path.join(CIRCUIT_DIR, "target", "satkey_auth.gz")} -o ${outFile}`,
+    `${BB} prove -s ultra_honk --oracle_hash keccak -b ${path.join(CIRCUIT_DIR, "target", "satkey_auth.json")} -w ${path.join(CIRCUIT_DIR, "target", "satkey_auth.gz")} -o ${outDir} --write_vk -v`,
     { cwd: CIRCUIT_DIR, stdio: "inherit" }
   );
-  console.log("✅ bb prove_ultra_keccak_honk succeeded!");
-  console.log("Proof file:", outFile, ", size:", fs.statSync(outFile).size, "bytes");
+  console.log("✅ bb prove succeeded!");
+  const proofFile = path.join(outDir, "proof");
+  const vkFile = path.join(outDir, "vk");
+  console.log("Proof file:", proofFile, ", size:", fs.statSync(proofFile).size, "bytes");
+  
+  console.log("\n--- Running garaga calldata ---");
+  const publicInputsFile = path.join(outDir, "public_inputs");
+  const calldataOut = execSync(
+    `garaga calldata --system ultra_keccak_zk_honk --vk ${vkFile} --proof ${proofFile} --public-inputs ${publicInputsFile} --format starkli`,
+    { encoding: "utf8" }
+  );
+  console.log("garaga calldata output:\n", calldataOut.slice(0, 500), "...");
+  fs.writeFileSync("/tmp/garaga_calldata.txt", calldataOut);
 } catch (err) {
   console.error("❌ FAILED:", err.message?.slice(0, 500));
 } finally {

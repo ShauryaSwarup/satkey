@@ -40,6 +40,7 @@ trait ISatKeyAccount<TContractState> {
     fn get_nonce(self: @TContractState) -> felt252;
     fn get_verifier_address(self: @TContractState) -> ContractAddress;
     fn get_public_key_salt(self: @TContractState) -> felt252;
+    fn execute_from_relayer(ref self: TContractState, calls: Array<starknet::account::Call>, signature: Span<felt252>) -> Array<Span<felt252>>;
 }
 
 // ── Contract ──────────────────────────────────────────────────────────────────
@@ -97,60 +98,9 @@ mod SatKeyAccount {
         /// The `signature` field of the tx contains the ZK proof + public signals.
         fn __validate__(ref self: ContractState, calls: Array<Call>) -> felt252 {
             let tx_info = get_tx_info().unbox();
-            let signature = tx_info.signature;
-
-            // Minimum: proof_len (1) + at least 1 proof felt + 4 public signals
-            assert(signature.len() >= 6, 'Signature too short');
-
-            // ── Deserialise signature ────────────────────────────────────────
-            // Layout: [proof_len, ...proof_felts, salt, msg_hash, nonce_sig, expiry_sig]
-            let proof_len: u32 = (*signature.at(0)).try_into().expect('proof_len overflow');
-            assert(
-                signature.len() == 1 + proof_len + 4,
-                'Invalid signature layout'
-            );
-
-            // Extract public signals (last 4 felts)
-            let sig_salt    = *signature.at(1 + proof_len);
-            let _msg_hash   = *signature.at(1 + proof_len + 1);
-            let sig_nonce   = *signature.at(1 + proof_len + 2);
-            let sig_expiry  = *signature.at(1 + proof_len + 3);
-
-            // ── Replay protection ────────────────────────────────────────────
-            let stored_nonce = self.nonce.read();
-            assert(sig_nonce == stored_nonce, 'Nonce mismatch');
-
-            // ── Freshness check ───────────────────────────────────────────────
-            let block_ts: felt252 = get_block_timestamp().into();
-            // sig_expiry > block_ts
-            // Cairo felt252 comparison: use u64 cast for safe comparison
-            let expiry_u64: u64 = sig_expiry.try_into().expect('expiry overflow');
-            let ts_u64: u64 = block_ts.try_into().expect('timestamp overflow');
-            assert(expiry_u64 > ts_u64, 'Proof expired');
-
-            // ── Salt binding: proof must use this account's salt ─────────────
-            let stored_salt = self.public_key_salt.read();
-            assert(sig_salt == stored_salt, 'Salt mismatch');
-
-            // ── ZK proof verification via Garaga ─────────────────────────────
-            // Garaga's verify_ultra_keccak_zk_honk_proof returns
-            // Result<Span<u256>, felt252> — Ok(public_inputs) or Err(error).
-            let verifier = IGaragaVerifierDispatcher {
-                contract_address: self.verifier_address.read()
-            };
-            let verify_result = verifier.verify_ultra_keccak_zk_honk_proof(signature);
-            match verify_result {
-                Result::Ok(_public_inputs) => {
-                    // Proof verified successfully
-                },
-                Result::Err(err) => {
-                    core::panic_with_felt252(err)
-                },
-            }
-
+            self._verify_and_check(tx_info.signature);
             starknet::VALIDATED
         }
-
         fn __validate_declare__(
             self: @ContractState,
             class_hash: felt252,
@@ -204,6 +154,74 @@ mod SatKeyAccount {
 
         fn get_public_key_salt(self: @ContractState) -> felt252 {
             self.public_key_salt.read()
+        }
+
+        fn execute_from_relayer(
+            ref self: ContractState,
+            calls: Array<Call>,
+            signature: Span<felt252>
+        ) -> Array<Span<felt252>> {
+            // Authenticate using the provided signature
+            self._verify_and_check(signature);
+
+            // Increment nonce after successful validation
+            let current_nonce = self.nonce.read();
+            self.nonce.write(current_nonce + 1);
+
+            // Emit authentication event
+            self.emit(Authenticated { nonce: current_nonce });
+
+            // Execute each call
+            let mut results: Array<Span<felt252>> = ArrayTrait::new();
+            for call in calls {
+                let result = call_contract_syscall(
+                    call.to,
+                    call.selector,
+                    call.calldata,
+                ).expect('Call failed');
+                results.append(result);
+            };
+            results
+        }
+    }
+
+    // ── Internal Helpers ──────────────────────────────────────────────────────
+    #[generate_trait]
+    impl InternalImpl of InternalTrait {
+        fn _verify_and_check(self: @ContractState, signature: Span<felt252>) {
+            // ── ZK proof verification via Garaga ─────────────────────────────
+            let verifier = IGaragaVerifierDispatcher {
+                contract_address: self.verifier_address.read()
+            };
+            let verify_result = verifier.verify_ultra_keccak_zk_honk_proof(signature);
+            let public_inputs = match verify_result {
+                Result::Ok(inputs) => inputs,
+                Result::Err(err) => {
+                    core::panic_with_felt252(err)
+                },
+            };
+
+            // Circuit returns 4 public inputs: [salt, message_hash, nonce, expiry]
+            assert(public_inputs.len() == 4, 'Invalid public inputs length');
+
+            let sig_salt: felt252 = (*public_inputs.at(0)).try_into().expect('salt overflow');
+            let _msg_hash: felt252 = (*public_inputs.at(1)).try_into().expect('msg_hash overflow');
+            let sig_nonce: felt252 = (*public_inputs.at(2)).try_into().expect('nonce overflow');
+            let sig_expiry: felt252 = (*public_inputs.at(3)).try_into().expect('expiry overflow');
+
+            // ── Replay protection ────────────────────────────────────────────
+            let stored_nonce = self.nonce.read();
+            assert(sig_nonce == stored_nonce, 'Nonce mismatch');
+
+            // ── Freshness check ───────────────────────────────────────────────
+            let block_ts: felt252 = get_block_timestamp().into();
+            let expiry_u64: u64 = sig_expiry.try_into().expect('expiry overflow');
+            let ts_u64: u64 = block_ts.try_into().expect('timestamp overflow');
+            assert(expiry_u64 > ts_u64, 'Proof expired');
+
+            // ── Salt binding: proof must use this account's salt ─────────────
+            let stored_salt = self.public_key_salt.read();
+            assert(sig_salt == stored_salt, 'Salt mismatch');
         }
     }
 }

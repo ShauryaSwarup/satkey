@@ -15,14 +15,8 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 
-const STARK_FIELD_PRIME = BigInt(
-  "0x0800000000000011000000000000000000000000000000000000000000000001"
-);
+// No longer need STARK_FIELD_PRIME manually since garaga calldata does the formatting
 
-/**
- * Resolve a CLI binary by checking common install paths.
- * Falls back to the bare name (relies on PATH).
- */
 function resolveBin(name: string, envVar: string, searchPaths: string[]): string {
   const fromEnv = process.env[envVar];
   if (fromEnv) return fromEnv;
@@ -40,110 +34,99 @@ const BB_BIN = resolveBin("bb", "BB_BIN", [
 ]);
 
 export interface ProofResult {
-  proof: string;           // hex-encoded proof bytes
+  fullProof: string[];     // the FullProof array (including MSM/KZG hints) of felt252 hex strings
   publicSignals: string[]; // [salt, msg_hash, nonce, expiry] as 0x-prefixed felt hex
 }
 
-/**
- * Converts raw proof bytes (Uint8Array, big-endian) into an array of felt252
- * hex strings. Each 32-byte chunk → one felt (% STARK_FIELD_PRIME).
- */
-export function proofBytesToFelts(proofBytes: Uint8Array): string[] {
-  const felts: string[] = [];
-  // Pad to multiple of 32
-  const padded = Buffer.alloc(Math.ceil(proofBytes.length / 32) * 32);
-  Buffer.from(proofBytes).copy(padded);
-
-  for (let i = 0; i < padded.length; i += 32) {
-    const chunk = padded.slice(i, i + 32);
-    const n = BigInt("0x" + chunk.toString("hex"));
-    const felt = n % STARK_FIELD_PRIME;
-    felts.push("0x" + felt.toString(16));
-  }
-  return felts;
-}
-
-/**
- * Run `nargo execute` then `bb prove` synchronously.
- *
- * nargo requires Prover.toml to live in the circuit root directory
- * (same folder as Nargo.toml). We copy the generated Prover.toml there,
- * run nargo, then restore the original if one existed.
- *
- * @param workDir    - temporary directory containing the generated Prover.toml
- * @param circuitDir - path to the circuits/satkey_auth directory (contains Nargo.toml)
- */
 export async function generateProof(
   workDir: string,
   circuitDir: string
 ): Promise<ProofResult> {
-  const circuitProverToml = path.join(circuitDir, "Prover.toml");
-  const workProverToml = path.join(workDir, "Prover.toml");
+  // To avoid race conditions in the shared circuit directory, we create a
+  // "shadow" project in the temporary workDir using symlinks for the source
+  // but a REAL COPY of Nargo.toml.
+  // This ensures nargo treats workDir as a distinct project root and looks
+  // for Prover.toml in the workDir.
+  
+  const srcDir = path.join(circuitDir, "src");
+  const nargoToml = path.join(circuitDir, "Nargo.toml");
+  const artifactPath = path.join(circuitDir, "target", "satkey_auth.json");
 
-  // Back up existing Prover.toml if present
-  let originalProverToml: string | null = null;
-  if (fs.existsSync(circuitProverToml)) {
-    originalProverToml = fs.readFileSync(circuitProverToml, "utf8");
+  // Copy Nargo.toml (essential to avoid nargo following symlink to shared root)
+  fs.copyFileSync(nargoToml, path.join(workDir, "Nargo.toml"));
+  
+  // Symlink the source code (read-only)
+  fs.symlinkSync(srcDir, path.join(workDir, "src"));
+  
+  // Create a local target directory and symlink the compiled artifact
+  const localTarget = path.join(workDir, "target");
+  fs.mkdirSync(localTarget);
+  if (fs.existsSync(artifactPath)) {
+    fs.symlinkSync(artifactPath, path.join(localTarget, "satkey_auth.json"));
+  } else {
+    // In production, the artifact should ALWAYS be present.
+    // If missing, we compile once in the workDir.
+    execSync(`${NARGO_BIN} compile`, {
+      cwd: workDir,
+      stdio: "pipe",
+    });
   }
 
   try {
-    // Copy generated Prover.toml into circuit root where nargo expects it
-    fs.copyFileSync(workProverToml, circuitProverToml);
-
-    // 1. Recompile circuit to ensure artifact matches installed nargo version
-    execSync(`${NARGO_BIN} compile`, {
-      cwd: circuitDir,
-      stdio: "pipe",
-    });
-
-    // 2. Execute the circuit (generate witness)
-    // nargo execute outputs circuit return values to stdout
+    // Generate witness (writes to workDir/target/satkey_auth.gz)
     const nargoOutput = execSync(`${NARGO_BIN} execute`, {
-      cwd: circuitDir,
+      cwd: workDir,
       stdio: "pipe",
     }).toString();
 
-    // Parse circuit output: [salt, message_hash, nonce, expiry]
-    // Format: Vec([Field(...), Field(...), Field(...), Field(...)])
+    // Extract public signals from nargo output: [0x..., 0x...]
     const publicSignals: string[] = [];
-    const fieldMatch = nargoOutput.matchAll(/Field\(([^)]+)\)/g);
-    for (const match of fieldMatch) {
-      let val = match[1];
-      // Handle negative numbers (modular representation)
-      if (val.startsWith('-')) {
-        const absVal = BigInt(val);
-        const felt = (STARK_FIELD_PRIME + absVal) % STARK_FIELD_PRIME;
-        publicSignals.push("0x" + felt.toString(16));
-      } else {
-        const felt = BigInt(val) % STARK_FIELD_PRIME;
+    const outputMatch = nargoOutput.match(/Circuit output: \[(.*)\]/);
+    if (outputMatch && outputMatch[1]) {
+      const tokens = outputMatch[1].split(",").map(s => s.trim());
+      for (const token of tokens) {
+        // Ensure 0x prefix
+        publicSignals.push(token.startsWith("0x") ? token : "0x" + token);
+      }
+    } else {
+      // Fallback to legacy Field(...) parsing if output format differs
+      const fieldMatch = nargoOutput.matchAll(/Field\(([^)]+)\)/g);
+      const STARK_FIELD_PRIME = BigInt("0x0800000000000011000000000000000000000000000000000000000000000001");
+      for (const match of fieldMatch) {
+        const val = match[1];
+        const felt = (BigInt(val) + (val.startsWith("-") ? STARK_FIELD_PRIME : 0n)) % STARK_FIELD_PRIME;
         publicSignals.push("0x" + felt.toString(16));
       }
     }
 
-    const witnessPath = path.join(circuitDir, "target", "satkey_auth.gz");
-
-    // 3. Generate proof via Barretenberg (ultra_keccak_honk)
-    // Output is a file, not a directory
-    const bbProofPath = path.join(workDir, "proof");
-
+    const witnessPath = path.join(localTarget, "satkey_auth.gz");
+    const jsonPath = path.join(localTarget, "satkey_auth.json");
+    
+    // Generate proof and write VK
     execSync(
-      `${BB_BIN} prove_ultra_keccak_honk -b ${path.join(circuitDir, "target", "satkey_auth.json")} -w ${witnessPath} -o ${bbProofPath}`,
-      { cwd: circuitDir, stdio: "pipe" }
+      `${BB_BIN} prove -s ultra_honk --oracle_hash keccak -b ${jsonPath} -w ${witnessPath} -o ${workDir} --write_vk`,
+      { cwd: workDir, stdio: "pipe" }
     );
-    // 4. Read proof from bb output file
-    // 4. Read proof from bb output file
-    const proofBytes = fs.readFileSync(bbProofPath);
+
+    const proofFile = path.join(workDir, "proof");
+    const vkFile = path.join(workDir, "vk");
+    const publicInputsFile = path.join(workDir, "public_inputs");
+
+    // Generate FullProof calldata via garaga
+    const calldataStr = execSync(
+      `garaga calldata --system ultra_keccak_zk_honk --vk ${vkFile} --proof ${proofFile} --public-inputs ${publicInputsFile} --format starkli`,
+      { encoding: "utf8" }
+    );
+
+    const tokens = calldataStr.trim().split(/\s+/);
+    const fullProof = tokens.slice(1).map(t => "0x" + BigInt(t).toString(16));
 
     return {
-      proof: "0x" + proofBytes.toString("hex"),
+      fullProof,
       publicSignals,
     };
-  } finally {
-    // Restore original Prover.toml (or remove if there wasn't one)
-    if (originalProverToml !== null) {
-      fs.writeFileSync(circuitProverToml, originalProverToml, "utf8");
-    } else {
-      fs.unlinkSync(circuitProverToml);
-    }
+  } catch (err) {
+    console.error("[prover] generateProof failed:", err);
+    throw err;
   }
 }

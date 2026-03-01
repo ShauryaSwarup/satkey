@@ -161,7 +161,7 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
 
       // Get the payment address specifically, because Ordinals (Taproot) addresses use 
       // Schnorr signatures, but our ZK circuit currently verifies ECDSA secp256k1!
-      const paymentAddressObj = addresses.find((a: any) => a.purpose === 'payment');
+      const paymentAddressObj = addresses.find((a: { purpose: string }) => a.purpose === 'payment');
       if (!paymentAddressObj) {
         setErrorMsg("No payment address found - cannot sign with ECDSA");
         setStep("error");
@@ -230,7 +230,7 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          proof: proofData.proof,
+          fullProof: proofData.fullProof,
           publicSignals: proofData.publicSignals,
           pubkey: pubkeyHex,
         }),

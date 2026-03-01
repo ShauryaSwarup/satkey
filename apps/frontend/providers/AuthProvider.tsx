@@ -39,8 +39,10 @@ export interface AuthContextType {
   setIsAuthenticated: (val: boolean) => void;
   balance: Balance | null;
   setBalance: (val: Balance | null) => void;
-  zkProof: { proof: string; publicSignals: string[] } | null;
-  setZkProof: (val: { proof: string; publicSignals: string[] } | null) => void;
+  zkProof: { fullProof: string[]; publicSignals: string[] } | null;
+  setZkProof: (val: { fullProof: string[]; publicSignals: string[] } | null) => void;
+
+
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -55,7 +57,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [btcPubkeyHex, setBtcPubkeyHex] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [balance, setBalance] = useState<Balance | null>(null);
-  const [zkProof, setZkProof] = useState<{ proof: string; publicSignals: string[] } | null>(null);
+  const [zkProof, setZkProof] = useState<{ fullProof: string[]; publicSignals: string[] } | null>(null);
 
   return (
     <AuthContext.Provider

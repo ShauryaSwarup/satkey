@@ -2,7 +2,7 @@
  * server.ts — Sat Key Relayer Service
  *
  * POST /relay
- *   Body: { proof: string, publicSignals: string[], starknetAddress: string }
+ *   Body: { fullProof: string[], publicSignals: string[], starknetAddress: string }
  *   Returns: { transactionHash: string }
  */
 
@@ -28,8 +28,8 @@ app.get("/health", (_req, res) => {
 app.post("/relay", async (req, res) => {
   const body = req.body as Partial<RelayRequest>;
 
-  if (!body.proof) {
-    res.status(400).json({ error: "Missing required field: proof" });
+  if (!body.fullProof || !Array.isArray(body.fullProof)) {
+    res.status(400).json({ error: "Missing or invalid required field: fullProof" });
     return;
   }
   if (!Array.isArray(body.publicSignals) || body.publicSignals.length < 4) {
@@ -56,8 +56,8 @@ app.post("/relay", async (req, res) => {
 app.post("/deploy-account", async (req, res) => {
   const body = req.body as Partial<DeployRequest>;
 
-  if (!body.proof || !body.pubkey) {
-    res.status(400).json({ error: "Missing required fields: proof, pubkey" });
+  if (!body.fullProof || !body.pubkey) {
+    res.status(400).json({ error: "Missing required fields: fullProof, pubkey" });
     return;
   }
   if (!Array.isArray(body.publicSignals) || body.publicSignals.length < 4) {

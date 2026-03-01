@@ -9,7 +9,7 @@ const UDC_ADDRESS =
   "0x041a78e741e5af2fec34b695679bc6891742439f7afb8484ecd7766661ad02bf";
 
 export interface DeployRequest {
-  proof: string;
+  fullProof: string[];
   publicSignals: string[];
   pubkey: string;
 }
