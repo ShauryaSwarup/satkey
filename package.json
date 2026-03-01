@@ -20,12 +20,6 @@
     "lint-staged": "^15.0.0",
     "turbo": "^2.0.0"
   },
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx}": [
-      "pnpm lint",
-      "pnpm typecheck"
-    ]
-  },
   "config": {
     "commitizen": {
       "path": "cz-conventional-changelog"
