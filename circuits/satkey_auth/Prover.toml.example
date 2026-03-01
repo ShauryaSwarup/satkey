@@ -1,0 +1,14 @@
+# Example Prover.toml for satkey_auth circuit
+# All byte arrays are big-endian hex strings encoded as arrays of u8 decimal values.
+# In practice, the prover service generates this from the witness builder.
+
+# Private inputs (witness) — not revealed in the proof
+pubkey_x = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # 32 bytes
+pubkey_y = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # 32 bytes
+sig_r    = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # 32 bytes
+sig_s    = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # 32 bytes
+
+# Public inputs — included in proof's public signals
+message_hash = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # SHA-256 of auth message
+nonce  = "0x0"  # timestamp-based nonce as felt hex
+expiry = "0x0"  # expiry timestamp as felt hex
