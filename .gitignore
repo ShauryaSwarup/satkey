@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+target/
+dist/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Secrets
+.secrets
+*.secrets
+
+# Lock files (optional - uncomment if needed)
+# pnpm-lock.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+test_output.log
+
+# Cairo / Starknet
+chain/target/
+satkey_verifier/target/
+
+# Turbo
+.turbo/
+
+# Misc
+*.tmp

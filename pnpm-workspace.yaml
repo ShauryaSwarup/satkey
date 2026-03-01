@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+  - circuits
+  - chain
+
+onlyBuiltDependencies:
+  - bigint-buffer
+  - secp256k1
