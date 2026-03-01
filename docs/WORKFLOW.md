@@ -243,7 +243,42 @@ The account's `__validate__` calls the verifier contract to check the proof on-c
 
 - **Deploy after auth**: Account deployment happens immediately after ZK authentication (not after bridging).
 - **Payment address only**: Use `purpose === 'payment'` address, NOT ordinals (Taproot uses Schnorr, not ECDSA).
-- **Prehash false**: When testing signature generation, use `@noble/curves` with `{ prehash: false }` — Noir expects pre-hashed input.
-- **bb output**: The prover binary outputs a directory with `proof` and `public_inputs` files, not a single file.
-- **Garaga build**: The verifier contract is ~100k+ lines of Cairo. `scarb build` takes 30-60+ minutes. Requires Scarb 2.14.0.
-- **Bitcoin, not Ethereum**: All signing uses Bitcoin's ECDSA secp256k1 with Bitcoin Signed Message format.
+JQ|- **bb output**: The prover binary outputs a directory with `proof` and `public_inputs` files, not a single file.
+ZY|- **Garaga build**: The verifier contract is ~100k+ lines of Cairo. `scarb build` takes 30-60+ minutes. Requires Scarb 2.14.0.
+VY|- **Bitcoin, not Ethereum**: All signing uses Bitcoin's ECDSA secp256k1 with Bitcoin Signed Message format.
+
+## Working Versions
+
+| Tool | Version |
+|------|--------|
+| bb (Barretenberg) | 3.0.0-nightly.20251104 |
+| nargo | 1.0.0-beta.16 |
+| garaga | 1.0.1 |
+| scarb | 2.14.0 |
+
+## Complete Build Workflow
+
+In directory `circuits/satkey_auth`:
+
+```bash
+# 1. Compile Noir circuit (outputs satkey_auth.json)
+nargo build
+
+# 2. Generate witness (outputs satkey_auth.gz)
+nargo execute
+
+# 3. Generate proof, vk, public inputs
+bb prove -s ultra_honk --oracle_hash keccak -b ./target/satkey_auth.json -w ./target/satkey_auth.gz -o ./target --write_vk -v
+
+# 4. Generate Cairo verifier contracts from vk
+garaga gen --system ultra_keccak_zk_honk --vk target/vk --project-name satkey_verifier
+
+# 5. Generate calldata for testing (starkli format)
+garaga calldata --system ultra_keccak_zk_honk --vk ./target/vk --proof ./target/proof --public-inputs ./target/public_inputs --format starkli > ../calldata.txt
+
+# 6. Build Cairo verifier contract
+cd satkey_verifier
+scarb build
+```
+
+The compiled verifier contract will be in `satkey_verifier/target/dev/.json`.

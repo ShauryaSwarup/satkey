@@ -1,24 +1,19 @@
-# Sepolia Deployment Guide
+ZJ|## Prerequisites
+RW|
+VH|1. **Starknet Sepolia ETH** - You'll need ETH on Sepolia to pay for gas
+XJ|2. **Wallet** - A Starknet wallet (ArgentX, Braavos, or Keplr) with Sepolia ETH
+XR|3. **Environment** - The relayer and prover services should be running
+XW|
+4. **Required Tools**:
 
-## Prerequisites
-
-1. **Starknet Sepolia ETH** - You'll need ETH on Sepolia to pay for gas
-2. **Wallet** - A Starknet wallet (ArgentX, Braavos, or Keplr) with Sepolia ETH
-3. **Environment** - The relayer and prover services should be running
+| Tool | Version |
+|------|--------|
+| bb (Barretenberg) | 3.0.0-nightly.20251104 |
+| nargo | 1.0.0-beta.16 |
+| garaga | 1.0.1 |
+| scarb | 2.14.0 |
 
 ## Step 1: Create .secrets File
-
-Create a `.secrets` file in the project root with your Starknet wallet credentials:
-
-```bash
-# .secrets
-STARKNET_RPC_URL=https://starknet-sepolia.public.blastapi.io
-ACCOUNT_ADDRESS=0xYOUR_WALLET_ADDRESS_HERE
-PRIVATE_KEY=0xYOUR_PRIVATE_KEY_HERE
-```
-
-**⚠️ SECURITY WARNING**: Never commit `.secrets` to version control!
-
 ## Step 2: Generate & Deploy the Garaga Verifier Contract
 
 The Garaga-generated verifier contract verifies ZK proofs on-chain.
@@ -115,34 +110,30 @@ sncast --account my-account declare --contract-name SatKeyAccount
 
 ## Verification Keys
 
-Make sure the VK used by the prover matches what's embedded in the verifier:
+BV|```bash
+PM|cd circuits/satkey_auth
+VR|# Regenerate proof and VK together (VK is written with --write_vk flag)
+bb prove -s ultra_honk --oracle_hash keccak -b ./target/satkey_auth.json -w ./target/satkey_auth.gz -o ./target --write_vk -v
 
-- **VK Location**: `circuits/satkey_auth/target/vk.bin`
-- The verifier contract was generated with this VK
-- The prover uses this VK to generate proofs
+YX|# Then regenerate the verifier
+YN|cd ../..
+KK|garaga gen --system ultra_keccak_zk_honk \
+PV|  --vk circuits/satkey_auth/target/vk \
+BB|  --project-name satkey_verifier
+BW|```
 
-If you modify the circuit, regenerate the VK and verifier:
-```bash
-cd circuits/satkey_auth
-bb write_vk -s ultra_honk --oracle_hash keccak -o target/vk.bin
-
-# Then regenerate the verifier
-cd ../..
-garaga gen --system ultra_keccak_zk_honk \
-  --vk circuits/satkey_auth/target/vk.bin \
-  --project-name satkey_verifier
-```
-
-## Troubleshooting
-
-### "Contract not found" errors
+JN|## Troubleshooting
+WV|
+ST|### "Contract not found" errors
 - Make sure you've declared the class hash first
 - Check the contract is actually deployed on the right network
 
-### Proof verification fails
-- Ensure the verifier address in relayer `.env` matches the deployed verifier
-- Check that the VK in `circuits/satkey_auth/target/vk.bin` matches what's in the verifier
+ST|### Proof verification fails
+ZN|- Ensure the verifier address in relayer `.env` matches the deployed verifier
+QX|- Check that the VK in `circuits/satkey_auth/target/vk` matches what's in the verifier
 
-### Transaction rejected
-- Make sure your wallet has enough Sepolia ETH for gas
-- Check the account has enough balance to pay for the transaction
+PT|### Transaction rejected
+ST|- Make sure your wallet has enough Sepolia ETH for gas
+BX|- Check the account has enough balance to pay for the transaction
+
+(End of file)

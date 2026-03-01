@@ -155,9 +155,9 @@ Bitcoin holders face a painful choice:
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | **Frontend** | Next.js + sats-connect | Wallet connection, message signing, flow orchestration |
-| **Prover** | Node.js + Noir + Barretenberg | Generates ZK proofs from Bitcoin signatures |
-| **ZK Circuit** | Noir (1.0.0-beta.1) | Proves ECDSA validity + derives Starknet salt |
-| **Verifier** | Cairo + Garaga (0.15.5) | On-chain proof verification |
+KT|| **Prover** | Node.js + Noir + Barretenberg | Generates ZK proofs from Bitcoin signatures |
+RK|| **ZK Circuit** | Noir (1.0.0-beta.16) | Proves ECDSA validity + derives Starknet salt |
+WQ|| **Verifier** | Cairo + Garaga (1.0.1) | On-chain proof verification |
 | **Relayer** | Node.js + Starknet.js | Account deployment + transaction execution |
 | **Account** | Cairo (SatKeyAccount) | Custom Starknet account using ZK for auth |
 
@@ -210,8 +210,8 @@ The prover generates ZK proofs. It's a thin API layer over the Noir circuit + Ba
 
 **Technology Stack**:
 - Node.js + Express
-- Noir 1.0.0-beta.1 (circuit compilation)
-- Barretenberg 0.67.0 (proof generation)
+- Noir 1.0.0-beta.16 (circuit compilation)
+- Barretenberg 3.0.0-nightly.20251104 (proof generation)
 
 #### API Endpoints
 
@@ -256,12 +256,35 @@ Generates a ZK proof verifying a valid ECDSA signature.
 - `apps/prover/src/proof.ts` — Barretenberg integration
 - `apps/prover/src/witness.ts` — Circuit input preparation
 
-**Running**:
+VN|**Build Workflow** (in `circuits/satkey_auth`):
 ```bash
-cd apps/prover
-cp .env.example .env
-pnpm dev
+# 1. Compile the Noir circuit
+nargo build
+
+# 2. Generate witness (outputs satkey_auth.gz)
+nargo execute
+
+# 3. Generate proof with Barretenberg
+bb prove -s ultra_honk --oracle_hash keccak -b ./target/satkey_auth.json -w ./target/satkey_auth.gz -o ./target --write_vk -v
+
+# 4. Generate Cairo verifier contracts with Garaga
+garaga gen --system ultra_keccak_zk_honk --vk target/vk --project-name satkey_verifier
+
+# 5. Generate calldata for testing (outputs starkli format)
+garaga calldata --system ultra_keccak_zk_honk --vk ./target/vk --proof ./target/proof --public-inputs ./target/public_inputs --format starkli > ../calldata.txt
+
+# 6. Build the Cairo verifier contract
+cd satkey_verifier
+scarb build
 ```
+
+**Versions that work:**
+| Tool | Version |
+|------|--------|
+| bb | 3.0.0-nightly.20251104 |
+| nargo | 1.0.0-beta.16 |
+| garaga | 1.0.1 |
+| scarb | 2.14.0 |
 
 ---
 
@@ -485,9 +508,9 @@ garaga deploy --class-hash 0x... --network sepolia
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Noir | 1.0.0-beta.1 | ZK circuit |
-| Barretenberg | 0.67.0 | Proof generation |
-| Garaga | 0.15.5 | Verifier generation |
+| Noir | 1.0.0-beta.16 | ZK circuit |
+| Barretenberg | 3.0.0-nightly.20251104 | Proof generation |
+| Garaga | 1.0.1 | Verifier generation |
 | Scarb | 2.14.0 | Cairo compilation |
 | Starkli | latest | Starknet CLI |
 
@@ -547,16 +570,9 @@ See `docs/SEPOLIA_DEPLOYMENT.md` for detailed instructions.
 
 ## Gas Considerations
 
-Starknet fees are paid in STRK. Options:
+Starknet fees are paid in STRK.
 
-### Gasfree (AVNU Paymaster)
 You sponsor all transaction fees. User pays nothing.
-
-### Gasless (AVNU Paymaster)
-User pays fees in USDC instead of STRK. Alternative to traditional gas.
-
-See AVNU Paymaster documentation for integration.
-
 ---
 
 ## Development
@@ -583,4 +599,4 @@ node test_prove.mjs
 
 ## License
 
-ISC
+MIT
