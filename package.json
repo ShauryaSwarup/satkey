@@ -12,6 +12,10 @@
     "prepare": "husky"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.4.2",
+    "@commitlint/config-conventional": "^20.4.2",
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
     "husky": "^9.0.0",
     "lint-staged": "^15.0.0",
     "turbo": "^2.0.0"
@@ -21,6 +25,11 @@
       "pnpm lint",
       "pnpm typecheck"
     ]
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
   },
   "keywords": [],
   "author": "ShauryaSwarup",
