@@ -33,10 +33,16 @@ export interface RelayResult {
  * against the verifier output inside the contract.
  */
 export function buildSignatureSpan(
-  fullProof: string[]
+  fullProof: string[],
+  publicSignals: string[]
 ): string[] {
-  // fullProof is already an array of felt252 hex strings
-  return fullProof;
+  // Build signature matching contract expectation:
+  // [proof_len, proof_felts..., salt, message_hash, nonce, expiry]
+  return [
+    num.toHex(fullProof.length), // proof_len
+    ...fullProof,                // proof_felts
+    ...publicSignals           // salt, msg_hash, nonce, expiry
+  ];
 }
 
 /**
@@ -59,10 +65,17 @@ export async function submitRelayTransaction(
   }
 
   const provider = new RpcProvider({ nodeUrl: rpcUrl });
-  const relayerAccount = new Account(provider, relayerAddress, relayerPrivateKey);
+  const relayerAccount = new Account({
+    provider,
+    address: relayerAddress,
+    signer: relayerPrivateKey,
+    cairoVersion: "1"
+  });
+  const signature = buildSignatureSpan(req.fullProof, req.publicSignals);
 
-  // Build the custom signature for the SatKey account
-  const signature = buildSignatureSpan(req.fullProof);
+  // For MVP: we pass an empty array of calls since we're just authenticating
+  // The contract will increment nonce and verify the proof
+  const calls: string[] = [];
   // The SatKey account address is the target of the outer invoke
   // We construct a "meta-transaction": relayer calls SatKey.__execute__
   // with the ZK proof as signature.
@@ -81,23 +94,22 @@ export async function submitRelayTransaction(
   // For MVP: relayer invokes a "relay" function on the SatKey account contract.
   // The SatKey account verifies the proof internally.
 
-  // Submit as a direct call to the SatKey account's execute_from_relayer entrypoint
-  // This bypasses the caller == 0 check and validates the signature natively
+  // Calldata structure for execute_from_relayer(calls: Array<Call>, signature: Span<felt252>)
+  // For MVP with 0 calls:
+  //   [calls_len=0, signature_len, ...signature_felts]
+  const calldata = [
+    "0x0", // calls_len = 0 (no actual calls, just auth)
+    num.toHex(signature.length), // signature_len
+    ...signature, // signature elements
+  ];
+
   const executeTx = await relayerAccount.execute([
     {
       contractAddress: req.starknetAddress,
       entrypoint: "execute_from_relayer",
-      calldata: [
-        // Number of calls = 0 (auth-only tx for MVP)
-        "0x0",
-        // Signature length
-        num.toHex(signature.length),
-        // Signature felts
-        ...signature,
-      ],
+      calldata,
     },
-  ]);
-
+  ], { version: 3 });
   await provider.waitForTransaction(executeTx.transaction_hash);
 
   return { transactionHash: executeTx.transaction_hash };

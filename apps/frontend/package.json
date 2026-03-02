@@ -22,7 +22,6 @@
     "react-dom": "19.2.3",
     "react-use-measure": "^2.1.7",
     "sats-connect": "^4.2.1",
-    "secp256k1": "^5.0.1",
     "starknet": "^9.2.1",
     "tailwind-merge": "^3.5.0"
   },

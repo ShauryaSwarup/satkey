@@ -1,4 +1,4 @@
-import { RpcProvider, Account, hash as starkHash, num, CallData } from "starknet";
+import { RpcProvider, Account, num, CallData, hash as starkHash } from "starknet";
 
 const DOMAIN_TAG = BigInt("0x5341544b4559");
 const STARK_FIELD_PRIME = BigInt(
@@ -68,25 +68,78 @@ function decompressPubkey(pubkeyHex: string): { x: bigint; y: bigint } {
 
 export function deriveStarknetSalt(pubkeyHex: string): bigint {
   const { x, y } = decompressPubkey(pubkeyHex);
-
   const xFelt = x % STARK_FIELD_PRIME;
   const yFelt = y % STARK_FIELD_PRIME;
   const domainFelt = DOMAIN_TAG % STARK_FIELD_PRIME;
 
-  // Use starknet.js Poseidon which operates on the Stark field
-  // (NOT circomlibjs which uses BN254 field)
-  const salt = BigInt(starkHash.computePoseidonHashOnElements([
+  const hashInput = [
     num.toHex(xFelt),
     num.toHex(yFelt),
     num.toHex(domainFelt),
-  ]));
+  ];
+  const hashResult = starkHash.computePoseidonHashOnElements(hashInput);
+  if (hashResult === undefined || hashResult === null) {
+    throw new Error(`Poseidon hash returned ${hashResult} for inputs ${hashInput}`);
+  }
+  return BigInt(hashResult);
+}
+export async function predictAddress(pubkeyHex: string): Promise<DeployResult> {
+  const rpcUrl = process.env.STARKNET_RPC_URL || "http://localhost:5050";
+  const classHash = process.env.SATKEY_CLASS_HASH || "0x0";
+  const verifierAddress = process.env.VERIFIER_ADDRESS || "0x0";
 
-  return salt;
+  console.log("[relayer] predictAddress inputs:", { pubkeyHex, classHash, verifierAddress });
+  const salt = deriveStarknetSalt(pubkeyHex);
+  const constructorCalldata = [verifierAddress, num.toHex(salt)];
+  console.log("[relayer] constructorCalldata:", constructorCalldata);
+  const expectedAddress = starkHash.calculateContractAddressFromHash(
+    num.toHex(salt),
+    classHash,
+    constructorCalldata,
+    0
+  );
+  console.log("[relayer] expectedAddress:", num.toHex(expectedAddress));
+
+  if (classHash === "0x0" || verifierAddress === "0x0") {
+    return {
+      accountAddress: num.toHex(expectedAddress),
+      transactionHash: "0x0",
+      alreadyDeployed: false,
+    };
+  }
+
+  const provider = new RpcProvider({ nodeUrl: rpcUrl });
+  let alreadyDeployed = false;
+  try {
+    await provider.getClassHashAt(num.toHex(expectedAddress));
+    alreadyDeployed = true;
+  } catch (err: any) {
+    const message = err?.message || String(err) || "";
+    if (!message.toLowerCase().includes("contract not found") && !message.toLowerCase().includes("not_found")) {
+      throw err;
+    }
+  }
+
+  return {
+    accountAddress: num.toHex(expectedAddress),
+    transactionHash: "0x0",
+    alreadyDeployed,
+  };
 }
 
 export async function deployAccount(
   req: DeployRequest
 ): Promise<DeployResult> {
+  const { accountAddress, alreadyDeployed } = await predictAddress(req.pubkey);
+
+  if (alreadyDeployed) {
+    return {
+      accountAddress,
+      transactionHash: "0x0",
+      alreadyDeployed: true,
+    };
+  }
+
   const rpcUrl = process.env.STARKNET_RPC_URL || "http://localhost:5050";
   const relayerAddress = process.env.RELAYER_ADDRESS;
   const relayerPrivateKey = process.env.RELAYER_PRIVATE_KEY;
@@ -100,48 +153,33 @@ export async function deployAccount(
   }
 
   const provider = new RpcProvider({ nodeUrl: rpcUrl });
-  const relayerAccount = new Account(provider, relayerAddress, relayerPrivateKey);
-
+  const relayerAccount = new Account({
+    provider,
+    address: relayerAddress,
+    signer: relayerPrivateKey,
+    cairoVersion: "1"
+  });
   const salt = deriveStarknetSalt(req.pubkey);
   const constructorCalldata = [verifierAddress, num.toHex(salt)];
-  const expectedAddress = starkHash.calculateContractAddressFromHash(
-    num.toHex(salt),
-    classHash,
-    constructorCalldata,
-    0
-  );
 
-  try {
-    await provider.getClassHashAt(num.toHex(expectedAddress));
-    return {
-      accountAddress: num.toHex(expectedAddress),
-      transactionHash: "0x0",
-      alreadyDeployed: true,
-    };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (!message.toLowerCase().includes("contract not found")) {
-      throw err;
-    }
-  }
-
+  console.log("[relayer] deployAccount execution starting...", { 1: classHash, 2: num.toHex(salt), 3: constructorCalldata });
   const deployTx = await relayerAccount.execute([
     {
       contractAddress: UDC_ADDRESS,
       entrypoint: "deployContract",
-      calldata: CallData.compile({
+      calldata: [
         classHash,
-        salt: num.toHex(salt),
-        unique: 0,
-        calldata: constructorCalldata,
-      }),
+        num.toHex(salt),
+        "0x0", // unique = false (0x0 means non-unique)
+        num.toHex(constructorCalldata.length), // Constructor calldata length
+        ...constructorCalldata, // Constructor calldata felts
+      ],
     },
-  ]);
-
+  ], { version: 3 });
   await provider.waitForTransaction(deployTx.transaction_hash);
 
   return {
-    accountAddress: num.toHex(expectedAddress),
+    accountAddress,
     transactionHash: deployTx.transaction_hash,
     alreadyDeployed: false,
   };

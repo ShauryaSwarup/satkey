@@ -14,6 +14,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import "dotenv/config";
+import { hash as starkHash, num } from "starknet";
 
 import { buildProverToml, ProveRequest } from "./witness";
 import { generateProof } from "./proof";
@@ -85,20 +86,36 @@ app.post("/prove", async (req, res) => {
     // 2. Run nargo execute + bb prove
     const result = await generateProof(workDir, CIRCUIT_DIR);
 
-    res.json(result);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[prover] Error:", message);
-    res.status(500).json({ error: message });
-  } finally {
-    // Clean up temp dir
-    fs.rmSync(workDir, { recursive: true, force: true });
-  }
-});
+    // 3. Predict Starknet address using the derived salt from publicSignals
+    // publicSignals[0] is the salt (Poseidon hash of pubkey)
+    const salt = result.publicSignals[0];
+    const classHash = process.env.SATKEY_CLASS_HASH || "0x0";
+    const verifierAddress = process.env.VERIFIER_ADDRESS || "0x0";
+    const constructorCalldata = [verifierAddress, num.toHex(salt)];
+    const accountAddress = starkHash.calculateContractAddressFromHash(
+      num.toHex(salt),
+      classHash,
+      constructorCalldata,
+      0
+    );
 
-app.listen(PORT, () => {
-  console.log(`[prover] Listening on http://localhost:${PORT}`);
-  console.log(`[prover] Circuit dir: ${CIRCUIT_DIR}`);
-});
+    res.json({
+      ...result,
+      accountAddress: num.toHex(accountAddress)
+    });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[prover] Error:", message);
+      res.status(500).json({ error: message });
+    } finally {
+      // Clean up temp dir
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  });
 
-export default app;
+  app.listen(PORT, () => {
+    console.log(`[prover] Listening on http://localhost:${PORT}`);
+    console.log(`[prover] Circuit dir: ${CIRCUIT_DIR}`);
+  });
+
+  export default app;

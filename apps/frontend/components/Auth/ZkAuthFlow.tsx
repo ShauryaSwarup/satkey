@@ -1,37 +1,99 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { concatBytes } from "@noble/hashes/utils.js";
 import { useAuth } from "@/providers/AuthProvider";
 import { formatStarknetAddress } from "@/lib/starknet";
-import { request, RpcErrorCode } from "sats-connect";
-import { Check, Loader2, AlertCircle, Key, ShieldCheck, Rocket } from "lucide-react";
+import { MessageSigningProtocols, request, RpcErrorCode } from "sats-connect";
+import {
+  Check,
+  Loader2,
+  AlertCircle,
+  Key,
+  ShieldCheck,
+  Rocket,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Environment variables (configure these for your deployment)
-const PROVER_URL = process.env.NEXT_PUBLIC_PROVER_URL || "http://localhost:3001";
-const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL || "http://localhost:3002";
+const PROVER_URL =
+  process.env.NEXT_PUBLIC_PROVER_URL || "http://localhost:3001";
+const RELAYER_URL =
+  process.env.NEXT_PUBLIC_RELAYER_URL || "http://localhost:3002";
 
-type Step = "idle" | "signing" | "proving" | "deploying" | "success" | "error";
+type Step =
+  | "idle"
+  | "checking"
+  | "signing"
+  | "proving"
+  | "deploying"
+  | "success"
+  | "error";
 
-export function ZkAuthFlow({ className, onComplete }: { className?: string; onComplete?: () => void }) {
-  const { isConnected, addresses, setIsAuthenticated, setZkProof, setStarknetAddress, starknetAddress } = useAuth();
+/**
+ * secp256k1 curve order and half-order for low-s normalization.
+ * Noir's ecdsa_secp256k1::verify_signature requires s <= order/2 (BIP-62).
+ */
+const SECP256K1_ORDER: bigint =
+  0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+const SECP256K1_HALF_ORDER: bigint = SECP256K1_ORDER >> 1n;
+
+export function ZkAuthFlow({
+  className,
+  onComplete,
+}: {
+  className?: string;
+  onComplete?: () => void;
+}) {
+  const {
+    isConnected,
+    addresses,
+    setIsAuthenticated,
+    setZkProof,
+    setStarknetAddress,
+    starknetAddress,
+    isAuthenticated,
+    btcPubkeyHex,
+    predictError,
+  } = useAuth();
   const [step, setStep] = useState<Step>("idle");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
   /**
-   * secp256k1 curve order and half-order for low-s normalization.
-   * Noir's ecdsa_secp256k1::verify_signature requires s <= order/2 (BIP-62).
+   * Effect to sync internal step with the global auth state.
+   * This handles the "returning user" case where the AuthProvider auto-authenticates.
    */
-  const SECP256K1_ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-  const SECP256K1_HALF_ORDER = SECP256K1_ORDER / 2n;
-
-  /**
-   * Normalizes a Bitcoin signature from wallet to r, s components.
-   * Also enforces low-s normalization required by Noir's ECDSA verifier.
-   */
+  useEffect(() => {
+    if (isConnected && isAuthenticated && starknetAddress) {
+      setStep("success");
+    } else if (predictError) {
+      setErrorMsg(predictError);
+      setStep("error");
+    } else if (
+      isConnected &&
+      btcPubkeyHex &&
+      !isAuthenticated &&
+      !starknetAddress
+    ) {
+      setStep("checking");
+    } else if (
+      isConnected &&
+      btcPubkeyHex &&
+      !isAuthenticated &&
+      starknetAddress
+    ) {
+      // Address is predicted but not deployed, show the ZK flow
+      setStep("idle");
+    }
+  }, [
+    isConnected,
+    isAuthenticated,
+    starknetAddress,
+    btcPubkeyHex,
+    predictError,
+  ]);
   function parseSignatureToRS(signature: string): { r: string; s: string } {
     // sats-connect returns base64-encoded signature
     // ECDSA: 64-byte compact (r || s) or 65-byte (recovery || r || s) or DER
@@ -62,12 +124,14 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
     } else if (bytes[0] === 0x30) {
       // DER-encoded: 0x30 len 0x02 rLen r 0x02 sLen s
       let offset = 2; // skip 0x30 and total length
-      if (bytes[offset] !== 0x02) throw new Error("Invalid DER: expected 0x02 for r");
+      if (bytes[offset] !== 0x02)
+        throw new Error("Invalid DER: expected 0x02 for r");
       offset++;
       const rLen = bytes[offset++];
       const rRaw = bytes.slice(offset, offset + rLen);
       offset += rLen;
-      if (bytes[offset] !== 0x02) throw new Error("Invalid DER: expected 0x02 for s");
+      if (bytes[offset] !== 0x02)
+        throw new Error("Invalid DER: expected 0x02 for s");
       offset++;
       const sLen = bytes[offset++];
       const sRaw = bytes.slice(offset, offset + sLen);
@@ -79,11 +143,16 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
       rBytes = bytes.slice(2, 34);
       sBytes = bytes.slice(34, 66);
     } else {
-      throw new Error(`Unsupported signature format (length=${bytes.length}, first=0x${bytes[0].toString(16)})`);
+      throw new Error(
+        `Unsupported signature format (length=${bytes.length}, first=0x${bytes[0].toString(16)})`,
+      );
     }
 
     const toHex = (b: Uint8Array) =>
-      "0x" + Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
+      "0x" +
+      Array.from(b)
+        .map((x) => x.toString(16).padStart(2, "0"))
+        .join("");
 
     // Low-s normalization: Noir's ecdsa_secp256k1::verify_signature requires s <= order/2.
     // Bitcoin wallets (via bitcoinjs-message) may return high-s signatures.
@@ -91,7 +160,9 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
     if (sVal > SECP256K1_HALF_ORDER) {
       sVal = SECP256K1_ORDER - sVal;
       const sHex = sVal.toString(16).padStart(64, "0");
-      sBytes = new Uint8Array(sHex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
+      sBytes = new Uint8Array(
+        sHex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)),
+      );
     }
 
     return { r: toHex(rBytes), s: toHex(sBytes) };
@@ -137,7 +208,11 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
     const messageBytes = new TextEncoder().encode(message);
     const messageLenVarint = encodeVarint(messageBytes.length);
 
-    const fullMessage = concatBytes(prefixBytes, messageLenVarint, messageBytes);
+    const fullMessage = concatBytes(
+      prefixBytes,
+      messageLenVarint,
+      messageBytes,
+    );
 
     // Double SHA-256
     const hash = sha256(sha256(fullMessage));
@@ -147,7 +222,6 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
       .join("");
     return "0x" + hashHex;
   }
-
 
   const handleAuthenticate = async () => {
     if (!isConnected || addresses.length === 0) {
@@ -159,16 +233,18 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
     try {
       setStep("signing");
 
-      // Get the payment address specifically, because Ordinals (Taproot) addresses use 
+      // Get the payment address specifically, because Ordinals (Taproot) addresses use
       // Schnorr signatures, but our ZK circuit currently verifies ECDSA secp256k1!
-      const paymentAddressObj = addresses.find((a: { purpose: string }) => a.purpose === 'payment');
+      const paymentAddressObj = addresses.find(
+        (a: { purpose: string }) => a.purpose === "payment",
+      );
       if (!paymentAddressObj) {
         setErrorMsg("No payment address found - cannot sign with ECDSA");
         setStep("error");
         return;
       }
       const addressToSign = paymentAddressObj.address;
-      
+
       // Auth message - includes nonce and expiry for replay protection
       const nonce = Date.now().toString();
       const expiry = (Date.now() + 5 * 60 * 1000).toString(); // 5 minutes
@@ -178,14 +254,17 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
       const signResponse = await request("signMessage", {
         address: addressToSign,
         message,
+        protocol: MessageSigningProtocols.ECDSA,
       });
 
       if (signResponse.status !== "success") {
-        throw new Error(signResponse.error?.message || "Failed to sign message");
+        throw new Error(
+          signResponse.error?.message || "Failed to sign message",
+        );
       }
 
       const signature = signResponse.result.signature;
-      
+
       // Parse signature into r, s components
       const { r, s } = parseSignatureToRS(signature);
 
@@ -195,7 +274,9 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
       // Step 3: Get public key hex - CRITICAL: Must use the SAME payment address's pubkey
       // that we're signing with, NOT btcPubkeyHex (which may be stale or wrong key)
       if (!paymentAddressObj?.publicKey) {
-        setErrorMsg("Payment address missing public key - cannot generate ZK proof");
+        setErrorMsg(
+          "Payment address missing public key - cannot generate ZK proof",
+        );
         setStep("error");
         return;
       }
@@ -246,11 +327,15 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
       setIsAuthenticated(true);
       setStep("success");
       onComplete?.();
-
     } catch (error: unknown) {
       console.error("Authentication error:", error);
-      
-      if (error && typeof error === "object" && "code" in error && error.code === RpcErrorCode.USER_REJECTION) {
+
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === RpcErrorCode.USER_REJECTION
+      ) {
         setErrorMsg("Request canceled by user");
       } else if (error instanceof Error) {
         setErrorMsg(error.message);
@@ -268,21 +353,55 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
 
   if (!isConnected) {
     return (
-      <div className={cn("flex flex-col items-center justify-center p-8 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl shadow-2xl", className)}>
+      <div
+        className={cn(
+          "flex flex-col items-center justify-center p-8 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl shadow-2xl",
+          className,
+        )}
+      >
         <ShieldCheck className="w-16 h-16 text-white/20 mb-4" />
-        <h3 className="text-xl font-semibold text-white mb-2">Authentication Required</h3>
-        <p className="text-sm text-white/60 text-center">Please connect your wallet to authenticate.</p>
+        <h3 className="text-xl font-semibold text-white mb-2">
+          Authentication Required
+        </h3>
+        <p className="text-sm text-white/60 text-center">
+          Please connect your wallet to authenticate.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className={cn("relative overflow-hidden flex flex-col items-center justify-center p-8 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl shadow-2xl", className)}>
+    <div
+      className={cn(
+        "relative overflow-hidden flex flex-col items-center justify-center p-8 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl shadow-2xl",
+        className,
+      )}
+    >
       {/* Decorative background glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-[200px] max-h-[200px] bg-orange-500/20 blur-[80px] rounded-full pointer-events-none" />
-      
-      <div className="relative z-10 w-full max-w-sm min-h-[240px] flex flex-col items-center justify-center">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-50 max-h-50 bg-orange-500/20 blur-[80px] rounded-full pointer-events-none" />
+
+      <div className="relative z-10 w-full max-w-sm min-h-60 flex flex-col items-center justify-center">
         <AnimatePresence mode="wait">
+          {step === "checking" && (
+            <motion.div
+              key="checking"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              className="flex flex-col items-center text-center w-full"
+            >
+              <div className="relative w-20 h-20 mb-6 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                Connecting...
+              </h3>
+              <p className="text-sm text-white/60">
+                Checking your Starknet account status.
+              </p>
+            </motion.div>
+          )}
+
           {step === "idle" && (
             <motion.div
               key="idle"
@@ -294,9 +413,12 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
               <div className="w-16 h-16 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center mb-6">
                 <Key className="w-8 h-8 text-orange-400" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">ZK Authentication</h3>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                ZK Authentication
+              </h3>
               <p className="text-sm text-white/60 mb-8">
-                Sign a message to generate a Zero-Knowledge proof of your Bitcoin ownership.
+                Sign a message to generate a Zero-Knowledge proof of your
+                Bitcoin ownership.
               </p>
               <button
                 onClick={handleAuthenticate}
@@ -317,16 +439,22 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
             >
               <div className="relative w-20 h-20 mb-6">
                 <div className="absolute inset-0 rounded-full border-2 border-orange-500/20" />
-                <motion.div 
+                <motion.div
                   className="absolute inset-0 rounded-full border-2 border-orange-500 border-t-transparent"
                   animate={{ rotate: 360 }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                  transition={{
+                    duration: 1.5,
+                    repeat: Infinity,
+                    ease: "linear",
+                  }}
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <Key className="w-8 h-8 text-orange-400 animate-pulse" />
                 </div>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Awaiting Signature</h3>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                Awaiting Signature
+              </h3>
               <p className="text-sm text-white/60">
                 Please confirm the signature request in your wallet.
               </p>
@@ -342,19 +470,25 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
               className="flex flex-col items-center text-center w-full"
             >
               <div className="relative w-24 h-24 mb-6 flex items-center justify-center">
-                <motion.div 
+                <motion.div
                   className="absolute inset-0 rounded-xl border border-orange-500/30"
                   animate={{ rotate: [0, 90, 180, 270, 360] }}
                   transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
                 />
-                <motion.div 
+                <motion.div
                   className="absolute inset-2 rounded-xl border border-orange-400/40"
                   animate={{ rotate: [360, 270, 180, 90, 0] }}
-                  transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
+                  transition={{
+                    duration: 2.5,
+                    repeat: Infinity,
+                    ease: "linear",
+                  }}
                 />
                 <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Generating ZK Proof</h3>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                Generating ZK Proof
+              </h3>
               <p className="text-sm text-white/60">
                 Computing zero-knowledge proof of signature...
               </p>
@@ -378,12 +512,20 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
                 <motion.div
                   className="absolute inset-2 rounded-xl border border-orange-400/40"
                   animate={{ rotate: [360, 270, 180, 90, 0] }}
-                  transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
+                  transition={{
+                    duration: 2.5,
+                    repeat: Infinity,
+                    ease: "linear",
+                  }}
                 />
                 <Rocket className="w-8 h-8 text-orange-400" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Deploying Account</h3>
-              <p className="text-sm text-white/60">Creating your Starknet account...</p>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                Deploying Account
+              </h3>
+              <p className="text-sm text-white/60">
+                Creating your Starknet account...
+              </p>
             </motion.div>
           )}
 
@@ -394,7 +536,7 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
               animate={{ opacity: 1, y: 0 }}
               className="flex flex-col items-center text-center w-full"
             >
-              <motion.div 
+              <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: "spring", damping: 12, stiffness: 200 }}
@@ -402,10 +544,17 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
               >
                 <Check className="w-10 h-10 text-green-400" />
               </motion.div>
-              <h3 className="text-xl font-semibold text-white mb-2">Authenticated!</h3>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                Authenticated!
+              </h3>
               <div className="text-sm text-white/60 space-y-1">
                 <p>Your identity has been verified successfully.</p>
-                {starknetAddress && <p>Your Starknet address: {formatStarknetAddress(starknetAddress)}</p>}
+                {starknetAddress && (
+                  <p>
+                    Your Starknet address:{" "}
+                    {formatStarknetAddress(starknetAddress)}
+                  </p>
+                )}
               </div>
             </motion.div>
           )}
@@ -421,10 +570,10 @@ export function ZkAuthFlow({ className, onComplete }: { className?: string; onCo
               <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-6">
                 <AlertCircle className="w-8 h-8 text-red-400" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Authentication Failed</h3>
-              <p className="text-sm text-red-400/80 mb-8">
-                {errorMsg}
-              </p>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                Authentication Failed
+              </h3>
+              <p className="text-sm text-red-400/80 mb-8">{errorMsg}</p>
               <button
                 onClick={resetFlow}
                 className="w-full py-3 px-4 bg-white/10 hover:bg-white/15 text-white rounded-xl font-medium transition-colors border border-white/10"

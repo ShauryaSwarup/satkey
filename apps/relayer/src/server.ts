@@ -11,7 +11,7 @@ import cors from "cors";
 import "dotenv/config";
 
 import { submitRelayTransaction, RelayRequest } from "./relay";
-import { deployAccount, DeployRequest } from "./deploy";
+import { deployAccount, DeployRequest, predictAddress } from "./deploy";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3002", 10);
@@ -49,6 +49,24 @@ app.post("/relay", async (req, res) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[relayer] Error:", message);
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/predict-address/:pubkey", async (req, res) => {
+  const { pubkey } = req.params;
+
+  if (!pubkey) {
+    res.status(400).json({ error: "Missing required parameter: pubkey" });
+    return;
+  }
+
+  try {
+    const result = await predictAddress(pubkey);
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[relayer] Predict error:", message);
     res.status(500).json({ error: message });
   }
 });

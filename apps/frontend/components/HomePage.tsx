@@ -76,7 +76,7 @@ export default function HomePage() {
             <Hero />
 
             <section className="relative py-12 bg-black border-y border-white/5 overflow-hidden">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[100px] bg-orange-500/5 blur-[100px] pointer-events-none" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-150 h-25 bg-orange-500/5 blur-[100px] pointer-events-none" />
                 <div className="container mx-auto px-4 relative z-10">
                     <h2 className="mb-8 text-center font-medium text-white/30 text-xs tracking-widest uppercase">
                         Trusted by industry leaders
@@ -86,7 +86,7 @@ export default function HomePage() {
             </section>
 
             <section className="relative py-24 bg-black overflow-hidden">
-                <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-orange-500/5 blur-[150px] pointer-events-none" />
+                <div className="absolute bottom-0 right-0 w-125 h-125 bg-orange-500/5 blur-[150px] pointer-events-none" />
                 <div className="container mx-auto px-4 max-w-7xl relative z-10">
                     <div className="mb-16 text-center">
                         <h2 className="text-3xl md:text-5xl font-bold text-white mb-4 tracking-tight">
