@@ -15,6 +15,7 @@ import * as path from "path";
 import * as os from "os";
 import "dotenv/config";
 import { hash as starkHash, num } from "starknet";
+import { buildPoseidon } from "circomlibjs";
 
 import { buildProverToml, ProveRequest } from "./witness";
 import { generateProof } from "./proof";
@@ -46,6 +47,18 @@ function resolveCircuitDir(): string {
 }
 
 const CIRCUIT_DIR = resolveCircuitDir();
+const poseidonPromise = buildPoseidon();
+
+function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+  let result = 1n;
+  base = base % mod;
+  while (exp > 0n) {
+    if (exp & 1n) result = (result * base) % mod;
+    exp >>= 1n;
+    base = (base * base) % mod;
+  }
+  return result;
+}
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
@@ -86,9 +99,37 @@ app.post("/prove", async (req, res) => {
     // 2. Run nargo execute + bb prove
     const result = await generateProof(workDir, CIRCUIT_DIR);
 
-    // 3. Predict Starknet address using the derived salt from publicSignals
-    // publicSignals[0] is the salt (Poseidon hash of pubkey)
-    const salt = result.publicSignals[0];
+    // 3. Predict Starknet address from pubkey using BN254 Poseidon (matches Noir circuit)
+    //    Then reduce mod STARK_FIELD_PRIME to fit in felt252 (matches account contract)
+    const STARK_FIELD_PRIME = BigInt("0x0800000000000011000000000000000000000000000000000000000000000001");
+    const DOMAIN_TAG = BigInt("0x5341544b4559"); // "SATKEY" ASCII
+
+    // Decompress pubkey to get x, y coordinates
+    const pubkeyClean = (body.pubkey as string).replace(/^0x/i, "").toLowerCase();
+    let px: bigint, py: bigint;
+    if (pubkeyClean.length === 130 && pubkeyClean.startsWith("04")) {
+      px = BigInt("0x" + pubkeyClean.slice(2, 66));
+      py = BigInt("0x" + pubkeyClean.slice(66, 130));
+    } else if (pubkeyClean.length === 66) {
+      const prefix = pubkeyClean.slice(0, 2);
+      const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
+      const x = BigInt("0x" + pubkeyClean.slice(2));
+      const y2 = (x ** 3n + 7n) % P;
+      let y = modPow(y2, (P + 1n) / 4n, P);
+      if ((y & 1n) !== (prefix === "03" ? 1n : 0n)) y = P - y;
+      px = x;
+      py = y;
+    } else {
+      throw new Error(`Invalid pubkey length: ${pubkeyClean.length}`);
+    }
+
+    // BN254 Poseidon hash — matches Noir circuit's poseidon::bn254::hash_3
+    const poseidon = await poseidonPromise;
+    const Fr = poseidon.F;
+    const hash = poseidon([Fr.e(px), Fr.e(py), Fr.e(DOMAIN_TAG)]);
+    const bn254Salt = poseidon.F.toObject(hash) as bigint;
+    const salt = bn254Salt % STARK_FIELD_PRIME;
+
     const classHash = process.env.SATKEY_CLASS_HASH || "0x0";
     const verifierAddress = process.env.VERIFIER_ADDRESS || "0x0";
     const constructorCalldata = [verifierAddress, num.toHex(salt)];

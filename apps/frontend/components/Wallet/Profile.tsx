@@ -12,12 +12,7 @@ export default function Profile() {
     isConnected,
     addresses,
     starknetAddress,
-    setIsConnected,
-    setAddresses,
-    setStarknetAddress,
-    setWalletType,
-    setWalletId,
-    setNetwork
+    resetAll,
   } = useAuth();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -41,13 +36,8 @@ export default function Profile() {
   const truncatedBtc = btcAddress ? `${btcAddress.slice(0, 6)}...${btcAddress.slice(-4)}` : "Unknown";
   const formattedStarknet = starknetAddress ? formatStarknetAddress(starknetAddress) : "Not derived";
 
-  const handleDisconnect = () => {
-    setIsConnected(false);
-    setAddresses([]);
-    setStarknetAddress(null);
-    setWalletType(null);
-    setWalletId(null);
-    setNetwork(null);
+  const handleDisconnect = async () => {
+    await resetAll();
     setIsOpen(false);
   };
 
@@ -61,7 +51,7 @@ export default function Profile() {
           isOpen && "bg-white/10 border-white/20 shadow-[0_0_20px_rgba(249,115,22,0.15)]"
         )}
       >
-        <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-orange-400/20 to-orange-600/20 border border-orange-400/30 text-orange-400 overflow-hidden">
+        <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-linear-to-br from-orange-400/20 to-orange-600/20 border border-orange-400/30 text-orange-400 overflow-hidden">
           <div className="absolute inset-0 bg-orange-400/10 blur-md"></div>
           <Bitcoin className="w-4 h-4 relative z-10" />
           {/* Connected Indicator */}
@@ -104,12 +94,12 @@ export default function Profile() {
 
               {/* Connection Link Visual */}
               <div className="relative h-8 -my-4 ml-5 flex items-center">
-                <div className="absolute top-0 bottom-0 left-[19px] w-px bg-gradient-to-b from-white/10 via-orange-400/30 to-orange-400/10"></div>
+                <div className="absolute top-0 bottom-0 left-4.75 w-px bg-linear-to-b from-white/10 via-orange-400/30 to-orange-400/10"></div>
                 <motion.div
                   initial={{ opacity: 0, scale: 0 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.2, duration: 0.4 }}
-                  className="absolute left-[11px] bg-[#0a0a0a] p-1 rounded-full border border-white/10 text-white/30"
+                  className="absolute left-2.75 bg-[#0a0a0a] p-1 rounded-full border border-white/10 text-white/30"
                 >
                   <Link2 className="w-3 h-3" />
                 </motion.div>
@@ -123,7 +113,7 @@ export default function Profile() {
                 className="flex items-start gap-4 relative"
               >
                 <div className="relative flex items-center justify-center w-10 h-10 rounded-2xl bg-orange-400/10 border border-orange-400/20 text-orange-400 shrink-0 overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-orange-400/20 to-transparent opacity-50"></div>
+                  <div className="absolute inset-0 bg-linear-to-br from-orange-400/20 to-transparent opacity-50"></div>
                   <Key className="w-5 h-5 relative z-10" />
                 </div>
                 <div className="flex flex-col pt-0.5">
@@ -146,7 +136,7 @@ export default function Profile() {
                 onClick={handleDisconnect}
                 className="group relative w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-sm text-white/60 hover:text-red-400 bg-white/5 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all duration-300 overflow-hidden"
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 via-red-500/5 to-red-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
+                <div className="absolute inset-0 bg-linear-to-r from-red-500/0 via-red-500/5 to-red-500/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                 <LogOut className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
                 <span className="font-medium tracking-wide">Disconnect</span>
               </button>

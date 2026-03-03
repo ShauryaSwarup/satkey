@@ -233,7 +233,10 @@ mod SatKeyAccount {
                 return false;
             }
 
-            let sig_salt: Option<felt252> = (*public_inputs.at(0)).try_into();
+            // BN254 Poseidon output may exceed Stark prime, reduce it first
+            let stark_prime: u256 = 0x0800000000000011000000000000000000000000000000000000000000000001_u256;
+            let raw_salt: u256 = *public_inputs.at(0);
+            let sig_salt: Option<felt252> = (raw_salt % stark_prime).try_into();
             let sig_nonce: Option<felt252> = (*public_inputs.at(2)).try_into();
             let sig_expiry: Option<felt252> = (*public_inputs.at(3)).try_into();
 
@@ -275,7 +278,12 @@ mod SatKeyAccount {
         /// is that the proof is bound to this account via salt, and nonce/expiry prevent replay.
         fn _check_public_inputs(self: @ContractState, public_inputs: Span<u256>) {
             assert(public_inputs.len() == 4, 'Invalid public inputs length');
-            let sig_salt: felt252 = (*public_inputs.at(0)).try_into().expect('salt overflow');
+            
+            // BN254 Poseidon output may exceed Stark prime, reduce it first
+            let stark_prime: u256 = 0x0800000000000011000000000000000000000000000000000000000000000001_u256;
+            let raw_salt: u256 = *public_inputs.at(0);
+            let sig_salt: felt252 = (raw_salt % stark_prime).try_into().expect('salt overflow');
+
             // message_hash at index 1 is NOT validated - see note above
             let sig_nonce: felt252 = (*public_inputs.at(2)).try_into().expect('nonce overflow');
             let sig_expiry: felt252 = (*public_inputs.at(3)).try_into().expect('expiry overflow');
@@ -283,7 +291,7 @@ mod SatKeyAccount {
             assert(sig_nonce == self.nonce.read(), 'Nonce mismatch');
             assert(sig_expiry.try_into().unwrap() > get_block_timestamp(), 'Proof expired');
             assert(sig_salt == self.public_key_salt.read(), 'Salt mismatch');
-        }
     }
+}
 }
 

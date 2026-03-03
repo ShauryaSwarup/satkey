@@ -1,9 +1,10 @@
 "use client";
 
-import { AddressPurpose, request, RpcErrorCode, BitcoinNetworkType } from "sats-connect";
+import Wallet, { AddressPurpose, RpcErrorCode } from "sats-connect";
 import { Key } from "lucide-react";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth, Address } from "@/providers/AuthProvider";
 import Profile from "./Profile";
+
 interface ConnectProps {
   onConnect?: () => void;
 }
@@ -12,10 +13,7 @@ const Connect = ({ onConnect }: ConnectProps) => {
   const {
     isConnected,
     setIsConnected,
-    setWalletType,
-    setWalletId,
     setAddresses,
-    setNetwork,
     setBtcPubkeyHex,
   } = useAuth();
 
@@ -25,45 +23,34 @@ const Connect = ({ onConnect }: ConnectProps) => {
 
   const onClick = async () => {
     try {
-      const response = await request('wallet_connect', {
-        // @ts-expect-error - sats-connect types mismatch
-        payload: {
-          network: {
-            type: BitcoinNetworkType.Testnet, // Default to testnet for MVP
-          },
-          purposes: [
-            AddressPurpose.Ordinals,
-            AddressPurpose.Payment,
-            AddressPurpose.Stacks,
-          ],
-        },
+      // Using 'getAccounts' instead of 'wallet_connect' for multi-wallet compatibility (UniSat/Leather/Xverse)
+      // Note: UniSat only supports Bitcoin purposes. Including Stacks/Starknet causes an error.
+      const response = await Wallet.request('getAccounts', {
+        purposes: [
+          AddressPurpose.Ordinals,
+          AddressPurpose.Payment,
+        ],
+        message: 'Connect to Sat Key',
       });
 
       if (response.status === 'success') {
-        const result = response.result;
+        const addresses = response.result as Address[];
         
         // Update auth state
-        setWalletType(result.walletType || null);
-        setWalletId(result.id || null);
-        // @ts-expect-error - sats-connect types mismatch
-        setAddresses(result.addresses || []);
-        setNetwork(result.network || null);
+        setAddresses(addresses);
         setIsConnected(true);
 
-        // Store raw pubkey hex for ZK proving — do NOT hash or derive here
-        // Starknet address will be computed after successful ZK auth
-        const paymentAddress = result.addresses?.find(
-          (addr: { purpose: string }) => addr.purpose === AddressPurpose.Payment
+        // Store raw pubkey hex for ZK proving
+        const paymentAddress = addresses.find(
+          (addr) => addr.purpose === AddressPurpose.Payment
         );
-        const ordinalsAddress = result.addresses?.find(
-          (addr: { purpose: string }) => addr.purpose === AddressPurpose.Ordinals
+        const ordinalsAddress = addresses.find(
+          (addr) => addr.purpose === AddressPurpose.Ordinals
         );
 
         // FOR ECDSA ZK AUTH: We MUST use the Payment address (Native Segwit) pubkey.
-        // Ordinals addresses use Taproot (Schnorr) which our circuit doesn't support yet.
         const pubkey = paymentAddress?.publicKey || ordinalsAddress?.publicKey;
         if (pubkey) {
-          // Store raw pubkey — ZkAuthFlow will derive salt + address after proving
           setBtcPubkeyHex(pubkey);
         }
         onConnect?.();

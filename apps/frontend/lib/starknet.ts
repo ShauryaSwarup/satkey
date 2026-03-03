@@ -2,19 +2,30 @@
  * Starknet Address Derivation Utilities
  *
  * Computes deterministic Starknet address from BTC public key using:
- * - Poseidon hash (starknet.js) for salt derivation (operates on Stark field)
+ * - BN254 Poseidon hash (circomlibjs) for salt derivation — matches Noir circuit exactly
+ * - Salt is reduced mod STARK_FIELD_PRIME for use as a felt252 on Starknet
  * - starknet.js hash.calculateContractAddressFromHash for address derivation
  */
 
+import { buildPoseidon } from "circomlibjs";
 import { hash as starkHash, num } from "starknet";
 
-// Domain separation tag: "SATKEY" as bigint felt252
+// Domain separation tag: "SATKEY" as bigint — matches Noir circuit's DOMAIN_TAG
 export const DOMAIN_TAG = BigInt("0x5341544b4559"); // "SATKEY" ASCII bytes big-endian
 
 // Starknet field prime
 export const STARK_FIELD_PRIME = BigInt(
   "0x0800000000000011000000000000000000000000000000000000000000000001"
 );
+
+// Cached BN254 Poseidon instance (initialized once)
+let _poseidon: Awaited<ReturnType<typeof buildPoseidon>> | null = null;
+async function getPoseidon() {
+  if (!_poseidon) {
+    _poseidon = await buildPoseidon();
+  }
+  return _poseidon;
+}
 
 /** Convert Uint8Array to bigint (big-endian) */
 function uint8ArrayToBigInt(arr: Uint8Array): bigint {
@@ -81,29 +92,26 @@ function decompressPubkey(pubkeyHex: string): { x: bigint; y: bigint } {
 }
 
 /**
- * Derives a deterministic Starknet salt from a BTC public key using Poseidon hash.
+ * Derives a deterministic Starknet salt from a BTC public key using BN254 Poseidon hash.
  *
- * salt = Poseidon(pubkey_x mod STARK_PRIME, pubkey_y mod STARK_PRIME, DOMAIN_TAG)
+ * This matches the Noir circuit exactly:
+ *   salt = poseidon::bn254::hash_3([bytes32_to_field(pubkey_x), bytes32_to_field(pubkey_y), DOMAIN_TAG])
+ *
+ * The BN254 Poseidon output is then reduced mod STARK_FIELD_PRIME so it fits in a felt252.
+ * The account contract performs the same reduction on the verifier's output.
  *
  * @param pubkeyHex - Compressed (33-byte) or uncompressed (65-byte) secp256k1 pubkey hex
  * @returns salt as bigint (reduced mod STARK_FIELD_PRIME)
  */
-export function deriveStarknetSalt(pubkeyHex: string): bigint {
+export async function deriveStarknetSalt(pubkeyHex: string): Promise<bigint> {
   const { x, y } = decompressPubkey(pubkeyHex);
 
-  const xFelt = x % STARK_FIELD_PRIME;
-  const yFelt = y % STARK_FIELD_PRIME;
-  const domainFelt = DOMAIN_TAG % STARK_FIELD_PRIME;
+  const poseidon = await getPoseidon();
+  const hash = poseidon([x, y, DOMAIN_TAG]);
+  const bn254Salt = poseidon.F.toObject(hash) as bigint;
 
-  // Use starknet.js Poseidon which operates on the Stark field
-  // (NOT circomlibjs which uses BN254 field)
-  const salt = BigInt(starkHash.computePoseidonHashOnElements([
-    num.toHex(xFelt),
-    num.toHex(yFelt),
-    num.toHex(domainFelt),
-  ]));
-
-  return salt;
+  // Reduce mod Stark prime so it fits in felt252 (matches account contract logic)
+  return bn254Salt % STARK_FIELD_PRIME;
 }
 
 /**

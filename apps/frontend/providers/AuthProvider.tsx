@@ -1,13 +1,14 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import Wallet from "sats-connect";
 
 export interface Address {
   address: string;
   publicKey: string;
   purpose: string;
-  addressType: string;
-  network: string;
+  addressType?: string;
+  network?: string;
 }
 
 export interface Network {
@@ -43,6 +44,7 @@ export interface AuthContextType {
   setZkProof: (val: { fullProof: string[]; publicSignals: string[] } | null) => void;
   predictError: string | null;
   setPredictError: (val: string | null) => void;
+  resetAll: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -60,6 +62,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [zkProof, setZkProof] = useState<{ fullProof: string[]; publicSignals: string[] } | null>(null);
   const [predictError, setPredictError] = useState<string | null>(null);
 
+  // Reset all auth state to initial values
+  const resetAll = async () => {
+    try {
+      await Wallet.disconnect();
+    } catch (err) {
+      console.error("[AuthProvider] Failed to disconnect wallet:", err);
+    }
+    setIsConnected(false);
+    setWalletType(null);
+    setWalletId(null);
+    setAddresses([]);
+    setNetwork(null);
+    setStarknetAddress(null);
+    setBtcPubkeyHex(null);
+    setIsAuthenticated(false);
+    setBalance(null);
+    setZkProof(null);
+    setPredictError(null);
+  };
+
   // Fast-Path Login for Returning Users
   useEffect(() => {
     // Uses same-origin API routes now (AVNU paymaster integration)
@@ -71,7 +93,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
           // Calculate address locally using our starknet utils
           const { deriveExpectedAccountAddress, deriveStarknetSalt } = await import('@/lib/starknet');
-          const salt = deriveStarknetSalt(btcPubkeyHex);
+          const salt = await deriveStarknetSalt(btcPubkeyHex);
           const classHash = process.env.NEXT_PUBLIC_SATKEY_CLASS_HASH || "0x0";
           const verifierAddress = process.env.NEXT_PUBLIC_VERIFIER_ADDRESS || "0x0";
 
@@ -140,6 +162,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setZkProof,
         predictError,
         setPredictError,
+        resetAll,
       }}
     >
       {children}

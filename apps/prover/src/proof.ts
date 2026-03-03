@@ -117,9 +117,18 @@ export async function generateProof(
       `garaga calldata --system ultra_keccak_zk_honk --vk ${vkFile} --proof ${proofFile} --public-inputs ${publicInputsFile} --format starkli`,
       { encoding: "utf8" }
     );
+    const STARK_FIELD_PRIME = BigInt("0x0800000000000011000000000000000000000000000000000000000000000001");
 
     const tokens = calldataStr.trim().split(/\s+/);
-    const fullProof = tokens.slice(1).map(t => "0x" + BigInt(t).toString(16));
+    const fullProof = tokens.slice(1).map(t => {
+      // Handle negative numbers from garaga: convert to proper field element
+      // Negative values in ZK proofs need to be mapped to [0, field_prime)
+      let value = BigInt(t);
+      if (value < 0n) {
+        value = (value % STARK_FIELD_PRIME + STARK_FIELD_PRIME) % STARK_FIELD_PRIME;
+      }
+      return "0x" + value.toString(16);
+    });
 
     return {
       fullProof,

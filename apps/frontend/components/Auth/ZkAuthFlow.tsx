@@ -6,7 +6,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { concatBytes } from "@noble/hashes/utils.js";
 import { useAuth } from "@/providers/AuthProvider";
 import { formatStarknetAddress } from "@/lib/starknet";
-import { MessageSigningProtocols, request, RpcErrorCode } from "sats-connect";
+import Wallet, { MessageSigningProtocols, RpcErrorCode } from "sats-connect";
 import {
   Check,
   Loader2,
@@ -94,6 +94,7 @@ export function ZkAuthFlow({
     btcPubkeyHex,
     predictError,
   ]);
+
   function parseSignatureToRS(signature: string): { r: string; s: string } {
     // sats-connect returns base64-encoded signature
     // ECDSA: 64-byte compact (r || s) or 65-byte (recovery || r || s) or DER
@@ -246,12 +247,24 @@ export function ZkAuthFlow({
       const addressToSign = paymentAddressObj.address;
 
       // Auth message - includes nonce and expiry for replay protection
-      const nonce = Date.now().toString();
+      // Get current nonce if account exists, otherwise 0 for deployment
+      let nonce = "0";
+      try {
+        const rpcUrl = process.env.NEXT_PUBLIC_STARKNET_RPC_URL || "https://starknet-sepolia.public.blastapi.io";
+        const { RpcProvider } = await import("starknet");
+        const provider = new RpcProvider({ nodeUrl: rpcUrl });
+        const contractNonce = await provider.getNonceForAddress(starknetAddress!);
+        nonce = BigInt(contractNonce).toString();
+      } catch (e) {
+        // Account likely not deployed or RPC error, default to 0 for deployment proof
+        nonce = "0";
+      }
+
       const expiry = (Date.now() + 5 * 60 * 1000).toString(); // 5 minutes
       const message = `Authenticate with Sat Key\n\nNonce: ${nonce}\nExpiry: ${expiry}\n\nSign this message to prove ownership of your wallet and generate a Zero-Knowledge Proof for Starknet.`;
 
       // Step 1: Sign message with Bitcoin wallet
-      const signResponse = await request("signMessage", {
+      const signResponse = await Wallet.request("signMessage", {
         address: addressToSign,
         message,
         protocol: MessageSigningProtocols.ECDSA,
