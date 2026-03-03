@@ -33,6 +33,7 @@ Thumbs.db
 test_output.log
 
 # Cairo / Starknet
+snfoundry.toml
 chain/target/
 satkey_verifier/target/
 
