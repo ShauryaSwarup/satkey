@@ -14,6 +14,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 // Mock Data
 const MOCK_DATA = {
@@ -172,17 +173,20 @@ export default function Dashboard() {
               title="Stake More" 
               description="Deposit BTC to earn yield"
               icon={<ArrowDownToLine className="h-6 w-6" />}
+              href="/stake"
               primary
             />
             <ActionCard 
               title="Bridge BTC" 
               description="Move assets to Starknet"
               icon={<ArrowRightLeft className="h-6 w-6" />}
+              href="/bridge"
             />
             <ActionCard 
               title="Unstake" 
               description="Withdraw your position"
               icon={<ArrowUpFromLine className="h-6 w-6" />}
+              href="/unstake"
             />
           </motion.div>
         </div>
@@ -261,15 +265,17 @@ function ActionCard({
   title, 
   description, 
   icon, 
+  href,
   primary = false 
 }: { 
   title: string; 
   description: string; 
   icon: React.ReactNode;
+  href: string;
   primary?: boolean;
 }) {
   return (
-    <button className={cn(
+    <Link href={href} className={cn(
       "flex items-center gap-4 p-5 rounded-2xl text-left transition-all duration-300 group relative overflow-hidden",
       primary 
         ? "bg-gradient-to-br from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 border-none shadow-[0_0_30px_rgba(249,115,22,0.2)] hover:shadow-[0_0_40px_rgba(249,115,22,0.4)]" 
@@ -299,6 +305,6 @@ function ActionCard({
           {description}
         </div>
       </div>
-    </button>
+    </Link>
   );
 }

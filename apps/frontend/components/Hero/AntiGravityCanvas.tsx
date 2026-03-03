@@ -75,7 +75,7 @@ const AntiGravityCanvas: React.FC = () => {
                 vx: 0,
                 vy: 0,
                 size: randomRange(1, 2.5),
-                color: Math.random() > 0.9 ? '#4285F4' : '#ffffff',
+                color: Math.random() > 0.9 ? '#FF6B2B' : '#FFE0CC',
                 angle: Math.random() * Math.PI * 2,
             });
         }

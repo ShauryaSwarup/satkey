@@ -134,7 +134,7 @@ export default function Profile() {
             >
               <button
                 onClick={handleDisconnect}
-                className="group relative w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-sm text-white/60 hover:text-red-400 bg-white/5 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all duration-300 overflow-hidden"
+                className="group relative w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-sm text-white/60 hover:text-red-400 bg-white/5 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all duration-300 overflow-hidden hover:cursor-pointer"
               >
                 <div className="absolute inset-0 bg-linear-to-r from-red-500/0 via-red-500/5 to-red-500/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                 <LogOut className="w-4 h-4 transition-transform group-hover:-translate-x-1" />

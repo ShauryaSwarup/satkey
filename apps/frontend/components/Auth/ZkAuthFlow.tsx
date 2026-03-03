@@ -18,8 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 
 // Environment variables (configure these for your deployment)
-const PROVER_URL =
-  process.env.NEXT_PUBLIC_PROVER_URL || "http://localhost:3001";
+const PROVER_URL = process.env.NEXT_PUBLIC_PROVER_URL || "http://localhost:3001";
 // API routes integrated into Next.js for AVNU paymaster support
 const API_BASE = ""; // Uses same-origin API routes
 
@@ -57,6 +56,7 @@ export function ZkAuthFlow({
     isAuthenticated,
     btcPubkeyHex,
     predictError,
+    isCheckingAccount,
   } = useAuth();
   const [step, setStep] = useState<Step>("idle");
   const [errorMsg, setErrorMsg] = useState<string>("");
@@ -66,25 +66,15 @@ export function ZkAuthFlow({
    * This handles the "returning user" case where the AuthProvider auto-authenticates.
    */
   useEffect(() => {
-    if (isConnected && isAuthenticated && starknetAddress) {
+    if (isCheckingAccount) {
+      setStep("checking");
+    } else if (isConnected && isAuthenticated && starknetAddress) {
       setStep("success");
+      onComplete?.();
     } else if (predictError) {
       setErrorMsg(predictError);
       setStep("error");
-    } else if (
-      isConnected &&
-      btcPubkeyHex &&
-      !isAuthenticated &&
-      !starknetAddress
-    ) {
-      setStep("checking");
-    } else if (
-      isConnected &&
-      btcPubkeyHex &&
-      !isAuthenticated &&
-      starknetAddress
-    ) {
-      // Address is predicted but not deployed, show the ZK flow
+    } else if (isConnected && btcPubkeyHex && !isAuthenticated) {
       setStep("idle");
     }
   }, [
@@ -93,6 +83,8 @@ export function ZkAuthFlow({
     starknetAddress,
     btcPubkeyHex,
     predictError,
+    isCheckingAccount,
+    onComplete,
   ]);
 
   function parseSignatureToRS(signature: string): { r: string; s: string } {
@@ -387,13 +379,14 @@ export function ZkAuthFlow({
     <div
       className={cn(
         "relative overflow-hidden flex flex-col items-center justify-center p-8 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl shadow-2xl",
+        "w-full max-w-lg min-h-[500px]",
         className,
       )}
     >
       {/* Decorative background glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-50 max-h-50 bg-orange-500/20 blur-[80px] rounded-full pointer-events-none" />
 
-      <div className="relative z-10 w-full max-w-sm min-h-60 flex flex-col items-center justify-center">
+      <div className="relative z-10 w-full flex flex-col items-center justify-center">
         <AnimatePresence mode="wait">
           {step === "checking" && (
             <motion.div
@@ -403,14 +396,14 @@ export function ZkAuthFlow({
               exit={{ opacity: 0, scale: 1.05 }}
               className="flex flex-col items-center text-center w-full"
             >
-              <div className="relative w-20 h-20 mb-6 flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
+              <div className="relative w-32 h-32 mb-8 flex items-center justify-center">
+                <Loader2 className="w-12 h-12 text-orange-400 animate-spin" />
               </div>
               <h3 className="text-xl font-semibold text-white mb-2">
-                Connecting...
+                Logging in...
               </h3>
               <p className="text-sm text-white/60">
-                Checking your Starknet account status.
+                Checking your account status.
               </p>
             </motion.div>
           )}
@@ -423,8 +416,8 @@ export function ZkAuthFlow({
               exit={{ opacity: 0, y: -10 }}
               className="flex flex-col items-center text-center w-full"
             >
-              <div className="w-16 h-16 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center mb-6">
-                <Key className="w-8 h-8 text-orange-400" />
+              <div className="w-24 h-24 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center mb-8">
+                <Key className="w-12 h-12 text-orange-400" />
               </div>
               <h3 className="text-xl font-semibold text-white mb-2">
                 ZK Authentication
@@ -450,7 +443,7 @@ export function ZkAuthFlow({
               exit={{ opacity: 0, scale: 1.05 }}
               className="flex flex-col items-center text-center w-full"
             >
-              <div className="relative w-20 h-20 mb-6">
+              <div className="relative w-32 h-32 mb-8">
                 <div className="absolute inset-0 rounded-full border-2 border-orange-500/20" />
                 <motion.div
                   className="absolute inset-0 rounded-full border-2 border-orange-500 border-t-transparent"
@@ -462,7 +455,7 @@ export function ZkAuthFlow({
                   }}
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Key className="w-8 h-8 text-orange-400 animate-pulse" />
+                  <Key className="w-12 h-12 text-orange-400 animate-pulse" />
                 </div>
               </div>
               <h3 className="text-xl font-semibold text-white mb-2">
@@ -482,14 +475,14 @@ export function ZkAuthFlow({
               exit={{ opacity: 0, scale: 1.05 }}
               className="flex flex-col items-center text-center w-full"
             >
-              <div className="relative w-24 h-24 mb-6 flex items-center justify-center">
+              <div className="relative w-40 h-40 mb-10 flex items-center justify-center">
                 <motion.div
-                  className="absolute inset-0 rounded-xl border border-orange-500/30"
+                  className="absolute inset-0 rounded-2xl border border-orange-500/30"
                   animate={{ rotate: [0, 90, 180, 270, 360] }}
                   transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
                 />
                 <motion.div
-                  className="absolute inset-2 rounded-xl border border-orange-400/40"
+                  className="absolute inset-4 rounded-2xl border border-orange-400/40"
                   animate={{ rotate: [360, 270, 180, 90, 0] }}
                   transition={{
                     duration: 2.5,
@@ -497,7 +490,7 @@ export function ZkAuthFlow({
                     ease: "linear",
                   }}
                 />
-                <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
+                <Loader2 className="w-16 h-16 text-orange-400 animate-spin" />
               </div>
               <h3 className="text-xl font-semibold text-white mb-2">
                 Generating ZK Proof
@@ -516,14 +509,14 @@ export function ZkAuthFlow({
               exit={{ opacity: 0, scale: 1.05 }}
               className="flex flex-col items-center text-center w-full"
             >
-              <div className="relative w-24 h-24 mb-6 flex items-center justify-center">
+              <div className="relative w-48 h-48 mb-10 flex items-center justify-center">
                 <motion.div
-                  className="absolute inset-0 rounded-xl border border-orange-500/30"
+                  className="absolute inset-0 rounded-2xl border border-orange-500/30"
                   animate={{ rotate: [0, 90, 180, 270, 360] }}
                   transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
                 />
                 <motion.div
-                  className="absolute inset-2 rounded-xl border border-orange-400/40"
+                  className="absolute inset-4 rounded-2xl border border-orange-400/40"
                   animate={{ rotate: [360, 270, 180, 90, 0] }}
                   transition={{
                     duration: 2.5,
@@ -531,7 +524,7 @@ export function ZkAuthFlow({
                     ease: "linear",
                   }}
                 />
-                <Rocket className="w-8 h-8 text-orange-400" />
+                <Rocket className="w-20 h-20 text-orange-400" />
               </div>
               <h3 className="text-xl font-semibold text-white mb-2">
                 Deploying Account
@@ -553,9 +546,9 @@ export function ZkAuthFlow({
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: "spring", damping: 12, stiffness: 200 }}
-                className="w-20 h-20 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center mb-6"
+                className="w-32 h-32 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center mb-8"
               >
-                <Check className="w-10 h-10 text-green-400" />
+                <Check className="w-16 h-16 text-green-400" />
               </motion.div>
               <h3 className="text-xl font-semibold text-white mb-2">
                 Authenticated!

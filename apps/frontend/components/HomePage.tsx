@@ -45,32 +45,6 @@ const logos = [
 ];
 
 export default function HomePage() {
-    const { isConnected, isAuthenticated } = useAuth();
-    const [showAuth, setShowAuth] = useState(false);
-
-    // If user is connected but not authenticated, show ZK auth flow
-    if (isConnected && !isAuthenticated) {
-        return (
-            <div className="flex flex-col min-h-screen bg-black">
-                <Hero />
-                <div className="flex-1 flex items-center justify-center py-20 px-4">
-                    <ZkAuthFlow onComplete={() => setShowAuth(false)} />
-                </div>
-                <Footer />
-            </div>
-        );
-    }
-
-    // If user is authenticated, show dashboard
-    if (isConnected && isAuthenticated) {
-        return (
-            <div className="flex flex-col min-h-screen bg-black">
-                <Dashboard />
-            </div>
-        );
-    }
-
-    // Default: Show landing page
     return (
         <div className="flex flex-col min-h-screen bg-black">
             <Hero />

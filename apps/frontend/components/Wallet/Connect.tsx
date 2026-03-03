@@ -1,8 +1,7 @@
 "use client";
 
-import Wallet, { AddressPurpose, RpcErrorCode } from "sats-connect";
 import { Key } from "lucide-react";
-import { useAuth, Address } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthProvider";
 import Profile from "./Profile";
 
 interface ConnectProps {
@@ -12,9 +11,7 @@ interface ConnectProps {
 const Connect = ({ onConnect }: ConnectProps) => {
   const {
     isConnected,
-    setIsConnected,
-    setAddresses,
-    setBtcPubkeyHex,
+    connect
   } = useAuth();
 
   if (isConnected) {
@@ -22,48 +19,8 @@ const Connect = ({ onConnect }: ConnectProps) => {
   }
 
   const onClick = async () => {
-    try {
-      // Using 'getAccounts' instead of 'wallet_connect' for multi-wallet compatibility (UniSat/Leather/Xverse)
-      // Note: UniSat only supports Bitcoin purposes. Including Stacks/Starknet causes an error.
-      const response = await Wallet.request('getAccounts', {
-        purposes: [
-          AddressPurpose.Ordinals,
-          AddressPurpose.Payment,
-        ],
-        message: 'Connect to Sat Key',
-      });
-
-      if (response.status === 'success') {
-        const addresses = response.result as Address[];
-        
-        // Update auth state
-        setAddresses(addresses);
-        setIsConnected(true);
-
-        // Store raw pubkey hex for ZK proving
-        const paymentAddress = addresses.find(
-          (addr) => addr.purpose === AddressPurpose.Payment
-        );
-        const ordinalsAddress = addresses.find(
-          (addr) => addr.purpose === AddressPurpose.Ordinals
-        );
-
-        // FOR ECDSA ZK AUTH: We MUST use the Payment address (Native Segwit) pubkey.
-        const pubkey = paymentAddress?.publicKey || ordinalsAddress?.publicKey;
-        if (pubkey) {
-          setBtcPubkeyHex(pubkey);
-        }
-        onConnect?.();
-      } else {
-        if (response.error?.code === RpcErrorCode.USER_REJECTION) {
-          console.log('User rejected connection request');
-        } else {
-          console.error('Wallet connection error:', response.error);
-        }
-      }
-    } catch (err: any) {
-      console.error('Connection failed:', err?.message || err);
-    }
+    await connect();
+    onConnect?.();
   };
 
   return (

@@ -29,6 +29,7 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@cartridge/controller": "^0.13.9",
     "@tailwindcss/postcss": "^4",
     "@types/circomlibjs": "^0.1.6",
     "@types/node": "^20",
@@ -37,8 +38,6 @@
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "prettier": "^3.8.1",
-    "prettier-plugin-tailwindcss": "^0.7.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
