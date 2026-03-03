@@ -67,7 +67,7 @@ const Footer = () => {
     ];
 
     return (
-        <footer className="bg-[#0F0F11]/10 relative h-fit rounded-3xl overflow-hidden m-8 border border-white/5">
+        <footer className="bg-linear-120 from-orange-500/20 to-orange-500/5 relative h-fit rounded-3xl overflow-hidden m-8 border border-white/5">
             <div className="max-w-7xl mx-auto p-14 z-40 relative">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 md:gap-8 lg:gap-16 pb-12">
                     {/* Brand section */}

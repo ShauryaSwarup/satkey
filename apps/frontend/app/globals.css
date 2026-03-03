@@ -8,4 +8,31 @@
 body {
     background-color: var(--background);
     color: var(--foreground);
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+}
+
+@theme {
+  --animate-arrow-nudge: arrow-nudge 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  --animate-button-pulse: button-pulse 1.6s ease-in-out infinite;
+
+  @keyframes button-pulse {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.05); /* ~2px visual growth */
+    }
+  }
+
+    @keyframes arrow-nudge {
+
+        0%,
+        100% {
+            transform: translateX(0);
+        }
+
+        50% {
+            transform: translateX(6px);
+        }
+    }
 }
