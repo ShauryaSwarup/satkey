@@ -5,6 +5,10 @@ edition = "2024_07"
 
 [dependencies]
 starknet = "2.16.0"
+openzeppelin = "3.0.0"
+openzeppelin_account = "3.0.0"
+openzeppelin_introspection = "3.0.0"
+openzeppelin_interfaces = "2.1.0"
 
 [[target.starknet-contract]]
 sierra = true

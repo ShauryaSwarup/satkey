@@ -41,7 +41,6 @@ export interface AuthContextType {
   setBalance: (val: Balance | null) => void;
   zkProof: { fullProof: string[]; publicSignals: string[] } | null;
   setZkProof: (val: { fullProof: string[]; publicSignals: string[] } | null) => void;
-
   predictError: string | null;
   setPredictError: (val: string | null) => void;
 }
@@ -60,30 +59,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [balance, setBalance] = useState<Balance | null>(null);
   const [zkProof, setZkProof] = useState<{ fullProof: string[]; publicSignals: string[] } | null>(null);
   const [predictError, setPredictError] = useState<string | null>(null);
+
   // Fast-Path Login for Returning Users
   useEffect(() => {
-    const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL || "http://localhost:3002";
-    
+    // Uses same-origin API routes now (AVNU paymaster integration)
+    // PredictAddress logic is handled client-side via deriveStarknetSalt
+    // For returning users, we check deployment status via /api/deploy
+
     if (isConnected && btcPubkeyHex && !isAuthenticated) {
       const checkReturningUser = async () => {
         try {
-          const res = await fetch(`${RELAYER_URL}/predict-address/${btcPubkeyHex}`);
+          // Calculate address locally using our starknet utils
+          const { deriveExpectedAccountAddress, deriveStarknetSalt } = await import('@/lib/starknet');
+          const salt = deriveStarknetSalt(btcPubkeyHex);
+          const classHash = process.env.NEXT_PUBLIC_SATKEY_CLASS_HASH || "0x0";
+          const verifierAddress = process.env.NEXT_PUBLIC_VERIFIER_ADDRESS || "0x0";
+
+          if (classHash === "0x0" || verifierAddress === "0x0") {
+            setPredictError("Frontend not configured with class hash");
+            return;
+          }
+
+          const accountAddress = deriveExpectedAccountAddress(
+            salt,
+            classHash,
+            [verifierAddress, "0x" + salt.toString(16)]
+          );
+          setPredictError(null);
+          setStarknetAddress(accountAddress);
+
+          // Check deployment status via API
+          const res = await fetch('/api/deploy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pubkey: btcPubkeyHex }),
+          });
+
           if (res.ok) {
             const data = await res.json();
-            setPredictError(null);
-            setStarknetAddress(data.accountAddress);
             if (data.alreadyDeployed) {
-              console.log("[AuthProvider] Returning user detected, auto-authenticating:", data.accountAddress);
+              console.log('[AuthProvider] Returning user detected, auto-authenticating:', data.accountAddress);
               setIsAuthenticated(true);
             }
           } else {
-            const errorData = await res.json().catch(() => ({ error: "Failed to fetch status" }));
-            console.error("[AuthProvider] Relayer returned error:", errorData.error);
-            setPredictError(errorData.error || "Relayer error");
+            const errorData = await res.json().catch(() => ({ error: 'Failed to fetch status' }));
+            console.error('[AuthProvider] Deploy API error:', errorData.error);
+            // Don't fail hard - user can still try to deploy
           }
         } catch (err) {
-          console.error("[AuthProvider] Failed to check returning user status:", err);
-          setPredictError("Connection failed");
+          console.error('[AuthProvider] Failed to check returning user status:', err);
+          setPredictError('Connection failed');
         }
       };
       checkReturningUser();

@@ -20,8 +20,8 @@ import { cn } from "@/lib/utils";
 // Environment variables (configure these for your deployment)
 const PROVER_URL =
   process.env.NEXT_PUBLIC_PROVER_URL || "http://localhost:3001";
-const RELAYER_URL =
-  process.env.NEXT_PUBLIC_RELAYER_URL || "http://localhost:3002";
+// API routes integrated into Next.js for AVNU paymaster support
+const API_BASE = ""; // Uses same-origin API routes
 
 type Step =
   | "idle"
@@ -307,7 +307,7 @@ export function ZkAuthFlow({
       setZkProof(proofData);
       setStep("deploying");
 
-      const deployResponse = await fetch(`${RELAYER_URL}/deploy-account`, {
+      const deployResponse = await fetch(`${API_BASE}/api/deploy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

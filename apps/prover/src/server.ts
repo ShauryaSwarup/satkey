@@ -96,26 +96,26 @@ app.post("/prove", async (req, res) => {
       num.toHex(salt),
       classHash,
       constructorCalldata,
-      0
+      0,
     );
 
     res.json({
       ...result,
-      accountAddress: num.toHex(accountAddress)
+      accountAddress: num.toHex(accountAddress),
     });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("[prover] Error:", message);
-      res.status(500).json({ error: message });
-    } finally {
-      // Clean up temp dir
-      fs.rmSync(workDir, { recursive: true, force: true });
-    }
-  });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[prover] Error:", message);
+    res.status(500).json({ error: message });
+  } finally {
+    // Clean up temp dir
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
 
-  app.listen(PORT, () => {
-    console.log(`[prover] Listening on http://localhost:${PORT}`);
-    console.log(`[prover] Circuit dir: ${CIRCUIT_DIR}`);
-  });
+app.listen(PORT, () => {
+  console.log(`[prover] Listening on http://localhost:${PORT}`);
+  console.log(`[prover] Circuit dir: ${CIRCUIT_DIR}`);
+});
 
-  export default app;
+export default app;
