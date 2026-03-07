@@ -240,19 +240,30 @@ export function BridgeFlow() {
         }
 
         // Create Starknet account with SatKeySigner
+        // Fetch current nonce from contract (it may have incremented since auth)
+        const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
+        let currentNonce: string;
+        try {
+          const nonceValue = await provider.getNonceForAddress(starknetAddress);
+          currentNonce = BigInt(nonceValue).toString();
+        } catch (e) {
+          console.warn('Failed to fetch nonce, using auth nonce:', e);
+          currentNonce = authCredentials.nonce;
+        }
+
         const signer = new SatKeySigner({
           proverUrl: PROVER_URL,
           btcProofInputs: {
             pubkey: authCredentials.pubkey,
-            signature_r: authCredentials.signature_r,
-            signature_s: authCredentials.signature_s,
-            message_hash: authCredentials.message_hash,
+            address: authCredentials.address,
+            message: authCredentials.message,
+            signature: authCredentials.signature,
             expiry: authCredentials.expiry,
             salt: authCredentials.salt,
+            nonce: currentNonce,
           }
         });
 
-        const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
         const account = new Account({
           provider,
           address: starknetAddress,
@@ -392,20 +403,33 @@ export function BridgeFlow() {
     setIsProcessing(true);
 
     try {
+      const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
+      if (!starknetAddress) throw new Error('No Starknet address found');
+
+      // Fetch current nonce from contract (it may have incremented since auth)
+      let currentNonce: string;
+      try {
+        const nonceValue = await provider.getNonceForAddress(starknetAddress);
+        currentNonce = BigInt(nonceValue).toString();
+      } catch (e) {
+        console.warn('Failed to fetch nonce, using auth nonce:', e);
+        currentNonce = authCredentials.nonce;
+      }
+
       const signer = new SatKeySigner({
         proverUrl: PROVER_URL,
         btcProofInputs: {
           pubkey: authCredentials.pubkey,
-          signature_r: authCredentials.signature_r,
-          signature_s: authCredentials.signature_s,
-          message_hash: authCredentials.message_hash,
+          address: authCredentials.address,
+          message: authCredentials.message,
+          signature: authCredentials.signature,
           expiry: authCredentials.expiry,
           salt: authCredentials.salt,
+          nonce: currentNonce,
         }
       });
 
-      const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
-      if (!starknetAddress) throw new Error("No Starknet address found");
+
       const account = new Account({
         provider,
         address: starknetAddress,
