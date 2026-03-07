@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get environment variables
     const rpcUrl = process.env.STARKNET_RPC_URL;
     const deployerAddress = process.env.DEPLOYER_ADDRESS;
     const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY;
@@ -48,16 +47,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Set up provider
     const provider = new RpcProvider({ nodeUrl: rpcUrl });
     
-    // Set up AVNU paymaster
     const paymaster = new PaymasterRpc({
       nodeUrl: 'https://sepolia.paymaster.avnu.fi',
       headers: { 'x-paymaster-api-key': avnuApiKey || '' },
     });
 
-    // Create deployer account WITH paymaster in constructor (signer + AVNU pays gas)
     const deployerAccount = new Account({
       provider,
       address: deployerAddress,
@@ -66,16 +62,9 @@ export async function POST(request: NextRequest) {
       cairoVersion: '1',
     });
 
-    // Build the signature matching SatKey account expectation
-    // Format: [proof_len, ...proof_felts, ...publicSignals]
     const signature = [
-      num.toHex(fullProof.length),
       ...fullProof,
-      ...publicSignals,
     ];
-
-    // Build the calls array
-    // For MVP, if no calls provided, we just authenticate (increment nonce)
     const txCalls = calls && calls.length > 0 
       ? calls.map(call => ({
           contractAddress: call.to,
@@ -84,25 +73,21 @@ export async function POST(request: NextRequest) {
         }))
       : [];
 
-    // Serialize the calls array: Cairo Array<Call> format
-    // Each Call: [to (felt), selector (felt), calldata_len (felt), ...calldata]
     const serializedCalls: string[] = [];
     for (const call of txCalls) {
-      serializedCalls.push(call.contractAddress); // to
-      serializedCalls.push(call.entrypoint);         // selector
-      serializedCalls.push(num.toHex(call.calldata.length)); // calldata_len
-      serializedCalls.push(...call.calldata);           // calldata elements
+      serializedCalls.push(call.contractAddress);
+      serializedCalls.push(call.entrypoint);         
+      serializedCalls.push(num.toHex(call.calldata.length)); 
+      serializedCalls.push(...call.calldata);           
     }
 
-    // Calldata for execute_from_relayer(calls: Array<Call>, signature: Span<felt252>)
     const executeCalldata = [
-      num.toHex(txCalls.length), // calls_len
-      ...serializedCalls,          // serialized Call objects
-      num.toHex(signature.length), // signature_len
-      ...signature,                // signature elements
+      num.toHex(txCalls.length), 
+      ...serializedCalls,          
+      num.toHex(signature.length), 
+      ...signature,                
     ];
 
-    // Execute with AVNU sponsored paymaster
     const feesDetails: PaymasterDetails = {
       feeMode: { mode: 'sponsored' },
     };

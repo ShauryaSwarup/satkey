@@ -139,12 +139,29 @@ address = starknet.calculateContractAddress(salt, classHash, [verifierClassHash,
 {
   pubkey: "02/03..." || "04...",   // compressed/uncompressed hex
   address: "bc1q...",              // Bitcoin address
+  message: "login:0:1234567890",   // Expected message format (NOTE: nonce MUST be decimal, not hex)
+  signature: "...",                // Base64 signature from wallet (Canonicalized)
+  nonce: "0",                      // Starknet transaction nonce (Decimal string)
+  expiry: "1234567890"             // Expiry timestamp
+}
+```
+
+```typescript
+{
+  pubkey: "02/03..." || "04...",   // compressed/uncompressed hex
+  address: "bc1q...",              // Bitcoin address
   message: "login:0:1234567890",   // Expected message format
   signature: "...",                // Base64 signature from wallet
   nonce: "0",                      // Starknet transaction nonce
   expiry: "1234567890"             // Expiry timestamp
 }
 ```
+
+## Key Data Formats & Gotchas
+
+1. **Nonce Formatting:** The nonce **must** be formatted as a decimal string (e.g., `"0"`, not `"0x0"`) inside the `login:<nonce>:<expiry>` message. Hex formatting will cause signature verification mismatches between the frontend, wallet, and backend prover.
+2. **Signature Normalization:** Different wallets (Xverse vs. Leather) and APIs return signatures in different encodings (raw Base64, JSON `{r,s}`, 0x-prefixed hex). The frontend and prover automatically canonicalize these formats (e.g., parsing DER to standard Base64) to ensure `bitcoinjs-message` can accurately verify the signature.
+3. **Starknet.js Array Serialization:** When executing transactions on-chain, **do not manually prepend the array length** to the signature array. `starknet.js` automatically prepends the array length (`proof_len`) when calling Cairo 1 contracts. Manually prefixing `fullProof.length` causes a `deserialization failed` panic in the Cairo `__validate__` execution.
 
 ### Phase 3: Bridge Operations & Nonce Handling
 

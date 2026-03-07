@@ -23,11 +23,12 @@ export interface Balance {
 
 export interface AuthCredentials {
   pubkey: string;
-  signature_r: string;
-  signature_s: string;
-  message_hash: string;
-  expiry: string;
+  address: string;
+  message: string;
+  signature: string;
   salt: string;
+  expiry: string;
+  nonce: string;
 }
 
 export interface AuthContextType {
@@ -63,8 +64,6 @@ export interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  // Avoid reading sessionStorage during render to prevent SSR/CSR mismatch.
-  // Initialize to stable defaults and hydrate on the client in useEffect.
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [walletType, setWalletType] = useState<string | null>(null);
   const [walletId, setWalletId] = useState<string | null>(null);
@@ -78,7 +77,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [predictError, setPredictError] = useState<string | null>(null);
   const [isCheckingAccount, setIsCheckingAccount] = useState<boolean>(false);
   const [authCredentials, setAuthCredentials] = useState<AuthCredentials | null>(null);
-  // Flag to indicate we've hydrated values from sessionStorage onto state
   const [storageHydrated, setStorageHydrated] = useState<boolean>(false);
 
   const connect = async () => {
@@ -121,7 +119,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Reset all auth state to initial values
   const resetAll = async () => {
     try {
       await Wallet.disconnect();
@@ -144,20 +141,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAuthCredentials(null);
   };
 
-  // Predict Account Address for Returning Users
-  // IMPORTANT: This does NOT authenticate. It only predicts the address so the UI can show it.
-  // ZkAuthFlow must always run to generate fresh credentials, even for returning users.
   useEffect(() => {
-    // Only run after we've hydrated session storage
     if (!storageHydrated) return;
 
-    if (isConnected && btcPubkeyHex && !isAuthenticated) {
+    if (isConnected && btcPubkeyHex && !isAuthenticated && authCredentials) {
       const predictAddress = async () => {
         setIsCheckingAccount(true);
         try {
-          // Calculate address locally using our starknet utils
-          const { deriveExpectedAccountAddress, deriveStarknetSalt } = await import('@/lib/starknet');
-          const salt = await deriveStarknetSalt(btcPubkeyHex);
+          const { deriveExpectedAccountAddress } = await import('@/lib/starknet');
           const classHash = process.env.NEXT_PUBLIC_SATKEY_CLASS_HASH || "0x0";
           const verifierClassHash = process.env.NEXT_PUBLIC_VERIFIER_CLASS_HASH || "0x0";
 
@@ -167,6 +158,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             return;
           }
 
+          const salt = BigInt(authCredentials.salt);
           const accountAddress = deriveExpectedAccountAddress(
             salt,
             classHash,
@@ -179,15 +171,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setPredictError('Connection failed');
         } finally {
           setIsCheckingAccount(false);
-          // NOTE: We do NOT set isAuthenticated here.
-          // ZkAuthFlow must run to generate fresh credentials for bridging.
         }
       };
       predictAddress();
     }
-  }, [isConnected, btcPubkeyHex, isAuthenticated, storageHydrated]);
+  }, [isConnected, btcPubkeyHex, isAuthenticated, authCredentials, storageHydrated]);
 
-  // Hydrate from sessionStorage on first client render
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -224,7 +213,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  // Persist relevant values to sessionStorage whenever they change
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {

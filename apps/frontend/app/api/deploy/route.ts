@@ -2,17 +2,17 @@
  * Deploy Account API Route
  * 
  * Deploys a SatKey account using the Universal Deployer Contract (UDC).
- * Uses AVNU paymaster for gas-free transactions (you sponsor, user pays nothing).
+ * Uses AVNU paymaster for gas-free transactions.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { RpcProvider, Account, num, hash as starkHash, PaymasterRpc, PaymasterDetails } from 'starknet';
-import { deriveStarknetSalt } from '@/lib/starknet';
 
 const UDC_ADDRESS = '0x041a78e741e5af2fec34b695679bc6891742439f7afb8484ecd7766661ad02bf';
 
 export interface DeployRequest {
   pubkey: string;
-  fullProof?: string[];
+  salt: string;
+    fullProof?: string[];
   publicSignals?: string[];
 }
 
@@ -25,16 +25,15 @@ export interface DeployResponse {
 export async function POST(request: NextRequest) {
   try {
     const body: DeployRequest = await request.json();
-    const { pubkey, fullProof, publicSignals } = body;
+    const { pubkey, salt, fullProof, publicSignals } = body;
 
-    if (!pubkey) {
+    if (!pubkey || !salt) {
       return NextResponse.json(
-        { error: 'Missing required field: pubkey' },
+        { error: 'Missing required field: pubkey or salt' },
         { status: 400 }
       );
     }
 
-    // Get environment variables
     const rpcUrl = process.env.STARKNET_RPC_URL;
     const deployerAddress = process.env.DEPLOYER_ADDRESS;
     const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY;
@@ -49,11 +48,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Set up provider
     const provider = new RpcProvider({ nodeUrl: rpcUrl });
 
-    // Calculate the expected address
-    const salt = await deriveStarknetSalt(pubkey);
     const constructorCalldata = [verifierClassHash, num.toHex(salt)];
     const expectedAddress = starkHash.calculateContractAddressFromHash(
       num.toHex(salt),
@@ -63,7 +59,6 @@ export async function POST(request: NextRequest) {
     );
     const accountAddress = num.toHex(expectedAddress);
 
-    // 1. Check if already deployed
     try {
       await provider.getClassHashAt(accountAddress);
       return NextResponse.json({
@@ -72,11 +67,9 @@ export async function POST(request: NextRequest) {
         alreadyDeployed: true,
       } as DeployResponse);
     } catch {
-      // Not deployed, continue to gating check
+      // Not deployed, continue
     }
 
-    // 2. Gating Check: If no proof provided, do NOT deploy.
-    // Just return the status so the frontend can trigger the ZK flow.
     if (!fullProof || !publicSignals) {
       return NextResponse.json({
         accountAddress,
@@ -85,14 +78,11 @@ export async function POST(request: NextRequest) {
       } as DeployResponse);
     }
 
-    // 3. Deployment Flow (Authorized by ZKP)
-    // Set up AVNU paymaster
     const paymaster = new PaymasterRpc({
       nodeUrl: 'https://sepolia.paymaster.avnu.fi',
       headers: { 'x-paymaster-api-key': avnuApiKey || '' },
     });
 
-    // Create deployer account WITH paymaster in constructor
     const deployerAccount = new Account({
       provider,
       address: deployerAddress,
@@ -101,7 +91,6 @@ export async function POST(request: NextRequest) {
       paymaster,
     });
 
-    // Build UDC deployment call
     const deployCalldata = [
       classHash,
       num.toHex(salt),
@@ -110,7 +99,6 @@ export async function POST(request: NextRequest) {
       ...constructorCalldata,
     ];
 
-    // Execute with AVNU sponsored paymaster
     const feesDetails: PaymasterDetails = {
       feeMode: { mode: 'sponsored' },
     };

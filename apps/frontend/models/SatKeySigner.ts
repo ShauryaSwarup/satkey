@@ -36,8 +36,8 @@ export class SatKeySigner implements SignerInterface {
     transactions: Call[],
     transactionsDetail: InvocationsSignerDetails
   ): Promise<Signature> {
-    // Ensure nonce is a decimal string (not hex)
-    let nonce = transactionsDetail.nonce || 0;
+    // Ensure nonce is a decimal string (not hex) for Bitcoin message signature verification
+    const nonce = transactionsDetail.nonce || 0;
     const nonceStr = typeof nonce === 'bigint' || typeof nonce === 'number' ? nonce.toString() : nonce;
 
     // Reconstruct message with current nonce: login:${nonce}:${expiry}
@@ -65,10 +65,7 @@ export class SatKeySigner implements SignerInterface {
     const { fullProof, publicSignals } = await response.json();
     console.log("Prover response - fullProof length:", fullProof.length, "publicSignals length:", publicSignals.length);
     
-    return [
-      num.toHex(fullProof.length),
-      ...fullProof,
-    ];
+    return fullProof;
   }
 
   public async signRaw(hash: string): Promise<Signature> {
@@ -101,10 +98,7 @@ export class SatKeySigner implements SignerInterface {
     const { fullProof, publicSignals } = await response.json();
     console.log("Prover response - fullProof length:", fullProof.length, "publicSignals length:", publicSignals.length);
 
-    return [
-      num.toHex(fullProof.length),
-      ...fullProof,
-    ];
+    return fullProof;
   }
 
   public async signMessage(typedData: TypedData, accountAddress: string): Promise<Signature> {

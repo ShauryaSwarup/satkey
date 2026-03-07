@@ -162,6 +162,52 @@ export function ZkAuthFlow({
     return { r: toHex(rBytes), s: toHex(sBytes) };
   }
 
+  // Helper: convert hex string (0x..) to Uint8Array
+  function hexToUint8(hex: string): Uint8Array {
+    const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
+    const bytes = clean.match(/.{1,2}/g) || [];
+    return new Uint8Array(bytes.map((b) => parseInt(b, 16)));
+  }
+
+  // Helper: DER-encode r and s (Uint8Array) into ASN.1 DER signature
+  function derEncode(r: Uint8Array, s: Uint8Array): Uint8Array {
+    // Strip leading zeros
+    const strip = (arr: Uint8Array) => {
+      let i = 0;
+      while (i < arr.length - 1 && arr[i] === 0) i++;
+      return arr.slice(i);
+    };
+    let rS = strip(r);
+    let sS = strip(s);
+
+    // If high bit set, prepend 0x00
+    if (rS[0] & 0x80) rS = Uint8Array.from([0x00, ...rS]);
+    if (sS[0] & 0x80) sS = Uint8Array.from([0x00, ...sS]);
+
+    const totalLen = 2 + rS.length + 2 + sS.length;
+    const out = new Uint8Array(2 + totalLen);
+    let off = 0;
+    out[off++] = 0x30;
+    out[off++] = totalLen;
+    out[off++] = 0x02;
+    out[off++] = rS.length;
+    out.set(rS, off);
+    off += rS.length;
+    out[off++] = 0x02;
+    out[off++] = sS.length;
+    out.set(sS, off);
+    return out;
+  }
+
+  function uint8ArrayToBase64(u8: Uint8Array) {
+    let binary = "";
+    for (let i = 0; i < u8.length; i++) {
+      binary += String.fromCharCode(u8[i]);
+    }
+    // btoa is available in browser environments
+    return typeof btoa === "function" ? btoa(binary) : Buffer.from(binary, "binary").toString("base64");
+  }
+
   /**
    * Encode an integer as a Bitcoin-style varint (CompactSize).
    * See https://en.bitcoin.it/wiki/Protocol_documentation#Variable_length_integer
@@ -260,7 +306,8 @@ export function ZkAuthFlow({
       }
 
       const expiry = Math.floor(Date.now() / 1000 + 5 * 60).toString(); // Unix timestamp in seconds
-      const message = `login:${nonce}:${expiry}`;
+      const nonceStr = BigInt(nonce).toString(); // Ensure decimal string (no 0x) for Bitcoin signature format
+      const message = `login:${nonceStr}:${expiry}`;
 
       const signResponse = await Wallet.request("signMessage", {
         address: addressToSign,
@@ -272,7 +319,30 @@ export function ZkAuthFlow({
         throw new Error(signResponse.error?.message || "Failed to sign message");
       }
 
-      const signature = signResponse.result.signature;
+      const rawSignature = signResponse.result.signature;
+
+      // Canonicalize signature to ASN.1/DER base64 which bitcoinjs-message.verify accepts
+      let signatureForProver = rawSignature;
+      try {
+        const { r, s } = parseSignatureToRS(rawSignature);
+        const rArr = hexToUint8(r);
+        const sArr = hexToUint8(s);
+        const der = derEncode(rArr, sArr);
+        signatureForProver = uint8ArrayToBase64(der);
+      } catch (e) {
+        console.warn("Failed to canonicalize signature to DER/base64, sending raw signature", e);
+        signatureForProver = rawSignature;
+      }
+
+      // DEV-LOG: Print sanitized preview of the /prove request payload for debugging
+      try {
+        const sigPreview = typeof signatureForProver === "string" ? signatureForProver.slice(0, 64) : String(signatureForProver).slice(0, 64);
+        console.log("[dev] /prove request => message:", message);
+        console.log("[dev] /prove request => address:", addressToSign, "nonce:", nonceStr, "expiry:", expiry);
+        console.log("[dev] /prove request => signature preview (truncated):", sigPreview);
+      } catch (e) {
+        console.warn('[dev] failed to print /prove request preview', e);
+      }
 
       setStep("proving");
 
@@ -283,8 +353,8 @@ export function ZkAuthFlow({
           pubkey: btcPubkeyHex,
           address: addressToSign,
           message,
-          signature,
-          nonce,
+          signature: signatureForProver,
+          nonce: nonceStr, // Pass decimal string to match message format verification
           expiry,
         }),
       });
@@ -321,10 +391,10 @@ export function ZkAuthFlow({
         pubkey: btcPubkeyHex!,
         address: addressToSign,
         message,
-        signature,
+        signature: rawSignature,
         salt,
         expiry,
-        nonce,
+        nonce: nonceStr, // Pass decimal string to match message format verification
       });
       setIsAuthenticated(true);
       setStep("success");
