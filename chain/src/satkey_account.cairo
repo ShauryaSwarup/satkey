@@ -9,10 +9,6 @@ trait IGaragaVerifier<TContractState> {
 
 // ── SatKeyAccount interface
 // ─────────────────────────────────────────────────
-// NOTE: pubkey_commitment removed — the circuit's second return value
-//       is poseidon(salt, nonce, expiry, salt), which is session-specific
-//       and changes every proof. It cannot be stored and re-checked.
-//       The salt alone is the static anchor that binds the account to its pubkey.
 #[starknet::interface]
 trait ISatKeyAccount<TContractState> {
     fn get_nonce(self: @TContractState) -> felt252;
@@ -26,7 +22,23 @@ trait ISatKeyAccount<TContractState> {
 // ── SatKeyAccount contract
 // ─────────────────────────────────────────────────
 //
-// Noir circuit public input layout (Barretenberg declaration order, then return values):
+// KEY DESIGN DECISION — Why ZK verification lives in __execute__, NOT __validate__:
+//
+//   StarkNet enforces a strict gas cap on the __validate__ entry point.
+//   It is designed only for lightweight checks (e.g. ECDSA scalar multiplication).
+//   Running a full UltraKeccakZKHonk proof in __validate__ always panics with
+//   "Out of gas", regardless of the fee you attach to the transaction.
+//
+//   Solution: __validate__ performs a minimal sanity check (non-empty signature),
+//   then __execute__ does the full ZK proof verification BEFORE dispatching calls.
+//   If verification fails, __execute__ panics and all state changes are reverted.
+//   The sequencer may still charge a small fee for the failed __execute__, but
+//   the account state (nonce, storage) remains intact — this is the accepted
+//   trade-off for ZK-based accounts on StarkNet today.
+//
+//   See also: starknet-edu/starknet-privacy-toolkit badge_contract pattern.
+//
+// Noir circuit public input layout (Barretenberg declaration order + return values):
 //
 //   pubkey_x: pub [u8;32]  → indices  0 ..= 31   (32 felt252s, one per byte)
 //   pubkey_y: pub [u8;32]  → indices 32 ..= 63   (32 felt252s, one per byte)
@@ -40,7 +52,8 @@ trait ISatKeyAccount<TContractState> {
 //
 #[starknet::contract(account)]
 mod SatKeyAccount {
-    use core::num::traits::Zero;
+    use super::IGaragaVerifierDispatcherTrait;
+use core::num::traits::Zero;
     use openzeppelin_account::utils::is_tx_version_valid;
     use openzeppelin_introspection::src5::SRC5Component;
     use openzeppelin_introspection::src5::SRC5Component::InternalTrait as SRC5InternalTrait;
@@ -48,28 +61,16 @@ mod SatKeyAccount {
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::syscalls::call_contract_syscall;
     use starknet::{get_block_timestamp, get_tx_info};
-    use super::IGaragaVerifierDispatcherTrait;
-    // IGaragaVerifierDispatcherTrait removed — only library dispatcher is used (class hash call)
     use super::{IGaragaVerifierLibraryDispatcher, ISatKeyAccount};
 
     const ISRC6_ID: felt252 = 0x2ceccef7f994940b3962a6c67e0ba4fcd37df7d131417c604f91e03caecc1cd;
 
     // ── Public input indices
-    // ──────────────────────────────────────────
-    // Derived from the Noir circuit declaration:
-    //   pubkey_x: [u8;32] = indices  0..31
-    //   pubkey_y: [u8;32] = indices 32..63
-    //   nonce:    Field   = index 64
-    //   expiry:   Field   = index 65
-    //   salt      Field   = index 66  (return[0])
-    //   commitment Field  = index 67  (return[1])
     const PUBLIC_INPUTS_LEN: u32 = 68;
     const IDX_NONCE: u32 = 64;
     const IDX_EXPIRY: u32 = 65;
     const IDX_SALT: u32 = 66;
-    // IDX_COMMITMENT = 67 is intentionally not checked on-chain:
-    // it encodes (salt, nonce, expiry, salt) and is implicitly validated
-    // by the ZK proof itself; no separate storage anchor is possible.
+    // IDX_COMMITMENT = 67 is implicitly validated by the ZK proof itself.
 
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
     #[abi(embed_v0)]
@@ -101,15 +102,11 @@ mod SatKeyAccount {
         nonce: felt252,
     }
 
-    /// Constructor
-    ///
-    /// # Arguments
-    /// * `verifier_class_hash` - Garaga-generated UltraKeccakZKHonk verifier class hash
-    /// * `public_key_salt`     - poseidon(pubkey) computed off-chain at account creation.
-    ///                           Must equal circuit return[0] for all valid proofs.
     #[constructor]
     fn constructor(
-        ref self: ContractState, verifier_class_hash: starknet::ClassHash, public_key_salt: felt252,
+        ref self: ContractState,
+        verifier_class_hash: starknet::ClassHash,
+        public_key_salt: felt252,
     ) {
         self.verifier_class_hash.write(verifier_class_hash);
         self.public_key_salt.write(public_key_salt);
@@ -118,16 +115,45 @@ mod SatKeyAccount {
     }
 
     // ── ISRC6 / AccountContract implementation
-    // ────────────────────────
+    // ────────────────────────────────────────────────────────────────────────
+    //
+    //  __validate__  →  CHEAP: only checks that a non-empty signature was supplied.
+    //                   Heavy ZK proof verification is intentionally deferred to
+    //                   __execute__ to stay within StarkNet's validate gas cap.
+    //
+    //  __execute__   →  Calls _verify_and_check() FIRST, before touching any state
+    //                   or dispatching calls.  If verification fails the whole tx
+    //                   reverts (nonce is not incremented, calls are not executed).
+    //
+    // ────────────────────────────────────────────────────────────────────────
 
     #[abi(embed_v0)]
     impl AccountContractImpl of starknet::account::AccountContract<ContractState> {
+        /// Lightweight gate — just confirm a signature blob was attached.
+        /// Full ZK verification happens in __execute__ due to the validate gas cap.
+        fn __validate__(ref self: ContractState, calls: Array<Call>) -> felt252 {
+            assert(is_tx_version_valid(), 'Invalid tx version');
+            let sig = get_tx_info().unbox().signature;
+            // Minimal check: proof must be non-empty.
+            // The ZK verifier will reject malformed proofs inside __execute__.
+            assert(!sig.is_empty(), 'Empty signature');
+            starknet::VALIDATED
+        }
+
+        /// Full ZK proof verification happens here, before any state mutation.
         fn __execute__(ref self: ContractState, calls: Array<Call>) -> Array<Span<felt252>> {
             assert(starknet::get_caller_address().is_zero(), 'Caller must be protocol');
             assert(is_tx_version_valid(), 'Invalid tx version');
+
+            // ── ZK verification (moved here from __validate__ to avoid gas cap) ──
+            let sig = get_tx_info().unbox().signature;
+            self._verify_and_check(sig);
+            // ─────────────────────────────────────────────────────────────────────
+
             let current_nonce = self.nonce.read();
             self.nonce.write(current_nonce + 1);
             self.emit(Authenticated { nonce: current_nonce });
+
             let mut results: Array<Span<felt252>> = ArrayTrait::new();
             for call in calls {
                 results
@@ -139,18 +165,13 @@ mod SatKeyAccount {
             results
         }
 
-        fn __validate__(ref self: ContractState, calls: Array<Call>) -> felt252 {
-            self._verify_and_check(get_tx_info().unbox().signature);
-            starknet::VALIDATED
-        }
-
         fn __validate_declare__(self: @ContractState, class_hash: felt252) -> felt252 {
             core::panic_with_felt252('Declare not supported')
         }
     }
 
     // ── is_valid_signature (camelCase + snake_case)
-    // ───────────────────
+    // ─────────────────────────────────────────────
 
     #[starknet::interface]
     trait ISRC6Extras<TContractState> {
@@ -189,7 +210,7 @@ mod SatKeyAccount {
     }
 
     // ── ISatKeyAccount implementation
-    // ─────────────────────────────────
+    // ───────────────────────────────
 
     #[abi(embed_v0)]
     impl ISatKeyAccountImpl of ISatKeyAccount<ContractState> {
@@ -225,11 +246,11 @@ mod SatKeyAccount {
     }
 
     // ── Internal helpers
-    // ──────────────────────────────────────────────
+    // ────────────────────────────────────────────
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {
-        /// Panicking path used by __validate__ and execute_from_relayer.
+        /// Panicking path used by __execute__ and execute_from_relayer.
         fn _verify_and_check(self: @ContractState, signature: Span<felt252>) {
             let public_inputs = self._do_verify(signature);
             self._check_public_inputs(public_inputs);
@@ -249,7 +270,6 @@ mod SatKeyAccount {
                 return false;
             }
 
-            // stark_prime reduction applied uniformly to all three values
             let stark_prime: u256 =
                 0x0800000000000011000000000000000000000000000000000000000000000001_u256;
 
@@ -295,25 +315,20 @@ mod SatKeyAccount {
         }
 
         /// Verify the decoded public inputs against stored state.
-        /// stark_prime reduction is applied uniformly to all values before conversion
-        /// to felt252, preventing latent panics on values >= stark_prime.
         fn _check_public_inputs(self: @ContractState, public_inputs: Span<u256>) {
             assert(public_inputs.len() == PUBLIC_INPUTS_LEN, 'Wrong public inputs length');
 
             let stark_prime: u256 =
                 0x0800000000000011000000000000000000000000000000000000000000000001_u256;
 
-            // Index 66: salt = poseidon(pubkey_x_hi, pubkey_x_lo, pubkey_y_hi, pubkey_y_lo, TAG)
             let sig_salt: felt252 = (*public_inputs.at(IDX_SALT) % stark_prime)
                 .try_into()
                 .expect('salt overflow');
 
-            // Index 64: nonce
             let sig_nonce: felt252 = (*public_inputs.at(IDX_NONCE) % stark_prime)
                 .try_into()
                 .expect('nonce overflow');
 
-            // Index 65: expiry (Unix timestamp)
             let sig_expiry: felt252 = (*public_inputs.at(IDX_EXPIRY) % stark_prime)
                 .try_into()
                 .expect('expiry overflow');
@@ -325,12 +340,8 @@ mod SatKeyAccount {
             let expiry_u64: u64 = sig_expiry.try_into().expect('expiry cast failed');
             assert(expiry_u64 > get_block_timestamp(), 'Proof expired');
 
-            // 3. Public key binding — salt is the static Poseidon fingerprint of the pubkey.
-            //    This is the sole anchor tying the proof to the registered key.
+            // 3. Public key binding
             assert(sig_salt == self.public_key_salt.read(), 'Salt mismatch');
-            // Index 67 (commitment = poseidon(salt, nonce, expiry, salt)) is implicitly
-        // validated by the ZK proof itself. No on-chain storage anchor exists for it
-        // because it is session-specific (encodes nonce and expiry).
         }
     }
 }
