@@ -239,6 +239,12 @@ export function ZkAuthFlow({
       }
       const addressToSign = paymentAddressObj.address;
 
+      if (!btcPubkeyHex) {
+        setErrorMsg('Bitcoin public key not set');
+        setStep('error');
+        return;
+      }
+
       // Auth message - includes nonce and expiry for replay protection
       // Get current nonce if account exists, otherwise 0 for deployment
       let nonce = "0";
@@ -312,7 +318,7 @@ export function ZkAuthFlow({
       setStarknetAddress(deployResult.accountAddress);
       // Store credentials for later use (e.g., relaying, session, etc.)
       setAuthCredentials({
-        pubkey: btcPubkeyHex,
+        pubkey: btcPubkeyHex!,
         address: addressToSign,
         message,
         signature,
