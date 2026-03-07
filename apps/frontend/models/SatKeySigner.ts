@@ -36,10 +36,13 @@ export class SatKeySigner implements SignerInterface {
     transactions: Call[],
     transactionsDetail: InvocationsSignerDetails
   ): Promise<Signature> {
-    const nonce = transactionsDetail.nonce || 0;
+    // Ensure nonce is a decimal string (not hex)
+    let nonce = transactionsDetail.nonce || 0;
+    const nonceStr = typeof nonce === 'bigint' || typeof nonce === 'number' ? nonce.toString() : nonce;
 
     // Reconstruct message with current nonce: login:${nonce}:${expiry}
-    const message = `login:${nonce}:${this.btcProofInputs.expiry}`;
+    // CRITICAL: nonce must be DECIMAL STRING, not hex (e.g., "0" not "0x0")
+    const message = `login:${nonceStr}:${this.btcProofInputs.expiry}`;
 
     const response = await fetch(`${this.proverUrl}/prove`, {
       method: "POST",
@@ -50,7 +53,7 @@ export class SatKeySigner implements SignerInterface {
         message,
         signature: this.btcProofInputs.signature,
         expiry: this.btcProofInputs.expiry,
-        nonce: num.toHex(nonce),
+        nonce: nonceStr,
       }),
     });
     
@@ -69,10 +72,13 @@ export class SatKeySigner implements SignerInterface {
   }
 
   public async signRaw(hash: string): Promise<Signature> {
-    const nonce = this.btcProofInputs.nonce || "0";
+    // Ensure nonce is a decimal string (not hex)
+    let nonce = this.btcProofInputs.nonce || "0";
+    const nonceStr = nonce.startsWith('0x') ? BigInt(nonce).toString() : nonce;
 
     // Reconstruct message with current nonce: login:${nonce}:${expiry}
-    const message = `login:${nonce}:${this.btcProofInputs.expiry}`;
+    // CRITICAL: nonce must be DECIMAL STRING, not hex (e.g., "0" not "0x0")
+    const message = `login:${nonceStr}:${this.btcProofInputs.expiry}`;
 
     const response = await fetch(`${this.proverUrl}/prove`, {
       method: "POST",
@@ -83,7 +89,7 @@ export class SatKeySigner implements SignerInterface {
         message,
         signature: this.btcProofInputs.signature,
         expiry: this.btcProofInputs.expiry,
-        nonce: num.toHex(nonce),
+        nonce: nonceStr,
       }),
     });
 
