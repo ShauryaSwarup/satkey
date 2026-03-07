@@ -4,6 +4,9 @@ packages:
   - circuits
   - chain
 
+ignoredBuiltDependencies:
+  - '@reown/appkit'
+
 onlyBuiltDependencies:
   - bigint-buffer
   - secp256k1

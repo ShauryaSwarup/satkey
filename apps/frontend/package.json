@@ -10,9 +10,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@atomiqlabs/chain-starknet": "^8.1.10",
+    "@atomiqlabs/sdk": "^8.3.6",
     "@noble/hashes": "^2.0.1",
     "@noble/secp256k1": "^3.0.0",
     "@satkey/crypto": "workspace:*",
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.48.1",
     "bigint-buffer": "^1.1.5",
     "circomlibjs": "^0.1.7",
     "clsx": "^2.1.1",
@@ -38,6 +42,7 @@
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "sha2": "link:@noble/hashes/sha2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

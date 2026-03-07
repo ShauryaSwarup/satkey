@@ -131,8 +131,9 @@ app.post("/prove", async (req, res) => {
     const salt = bn254Salt % STARK_FIELD_PRIME;
 
     const classHash = process.env.SATKEY_CLASS_HASH || "0x0";
-    const verifierAddress = process.env.VERIFIER_ADDRESS || "0x0";
-    const constructorCalldata = [verifierAddress, num.toHex(salt)];
+    const verifierClassHash = process.env.VERIFIER_CLASS_HASH || "0x0";
+    const constructorCalldata = [verifierClassHash, num.toHex(salt)];
+
     const accountAddress = starkHash.calculateContractAddressFromHash(
       num.toHex(salt),
       classHash,

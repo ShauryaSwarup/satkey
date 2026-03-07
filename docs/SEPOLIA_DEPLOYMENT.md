@@ -1,19 +1,19 @@
 ZJ|## Prerequisites
 RW|
-VH|1. **Starknet Sepolia ETH** - You'll need ETH on Sepolia to pay for gas
+VH|1. **Starknet Sepolia ETH** - You'll need STRK on Starknet Sepolia to pay for gas
 XJ|2. **Wallet** - A Starknet wallet (ArgentX, Braavos, or Keplr) with Sepolia ETH
 XR|3. **Environment** - The relayer and prover services should be running
-XW|
-4. **Required Tools**:
+XW| 4. **Required Tools**:
 
-| Tool | Version |
-|------|--------|
+| Tool              | Version                |
+| ----------------- | ---------------------- |
 | bb (Barretenberg) | 3.0.0-nightly.20251104 |
-| nargo | 1.0.0-beta.16 |
-| garaga | 1.0.1 |
-| scarb | 2.14.0 |
+| nargo             | 1.0.0-beta.16          |
+| garaga            | 1.0.1                  |
+| scarb             | 2.14.0                 |
 
 ## Step 1: Create .secrets File
+
 ## Step 2: Generate & Deploy the Garaga Verifier Contract
 
 The Garaga-generated verifier contract verifies ZK proofs on-chain.
@@ -62,8 +62,8 @@ Create or update `apps/relayer/.env`:
 STARKNET_RPC_URL=https://starknet-sepolia.public.blastapi.io
 RELAYER_ADDRESS=0xYOUR_WALLET_ADDRESS
 RELAYER_PRIVATE_KEY=0xYOUR_PRIVATE_KEY
-SATKEY_CLASS_HASH=0xACCOUNT_CLASS_HASH_FROM_STEP_4
-VERIFIER_ADDRESS=0xVERIFIER_ADDRESS_FROM_STEP_3
+NEXT_PUBLIC_SATKEY_CLASS_HASH=0xACCOUNT_CLASS_HASH_FROM_STEP_4
+NEXT_PUBLIC_VERIFIER_CLASS_HASH=0xVERIFIER_ADDRESS_FROM_STEP_3
 ```
 
 ## Step 6: Restart Services
@@ -97,43 +97,43 @@ sncast account import --name my-account \
   --type oz
 
 # 2. Declare verifier
-cd satkey_verifier
-sncast --account my-account declare --contract-name UltraKeccakZKHonkVerifier
+garaga declare --network sepolia --project-path ./circuits/satkey_auth/satkey_verifier --env-file .secrets --fee strk
 
 # 3. Deploy verifier
-sncast --account my-account deploy --class-hash 0xVERIFIER_CLASS_HASH
+garaga deploy --class-hash <CLASS_HASH> --network sepolia --env-file=.secrets
 
 # 4. Declare account contract
-cd ../chain
-sncast --account my-account declare --contract-name SatKeyAccount
+cd ./chain
+sncast --account my-account declare --contract-name SatKeyAccount --network=sepolia
 ```
 
 ## Verification Keys
 
-BV|```bash
-PM|cd circuits/satkey_auth
-VR|# Regenerate proof and VK together (VK is written with --write_vk flag)
+VN|Build Workflow (in circuits/satkey_auth):
+
+# 1. Compile the Noir circuit
+
+nargo build
+
+# 2. Generate witness (outputs satkey_auth.gz)
+
+nargo execute
+
+# 3. Generate proof with Barretenberg
+
 bb prove -s ultra_honk --oracle_hash keccak -b ./target/satkey_auth.json -w ./target/satkey_auth.gz -o ./target --write_vk -v
 
-YX|# Then regenerate the verifier
-YN|cd ../..
-KK|garaga gen --system ultra_keccak_zk_honk \
-PV|  --vk circuits/satkey_auth/target/vk \
-BB|  --project-name satkey_verifier
-BW|```
+# 4. Generate Cairo verifier contracts with Garaga
 
-JN|## Troubleshooting
-WV|
-ST|### "Contract not found" errors
-- Make sure you've declared the class hash first
-- Check the contract is actually deployed on the right network
+garaga gen --system ultra_keccak_zk_honk --vk target/vk --project-name satkey_verifier
 
-ST|### Proof verification fails
-ZN|- Ensure the verifier address in relayer `.env` matches the deployed verifier
-QX|- Check that the VK in `circuits/satkey_auth/target/vk` matches what's in the verifier
+# 5. Generate calldata for testing (outputs starkli format)
 
-PT|### Transaction rejected
-ST|- Make sure your wallet has enough Sepolia ETH for gas
-BX|- Check the account has enough balance to pay for the transaction
+garaga calldata --system ultra_keccak_zk_honk --vk ./target/vk --proof ./target/proof --public-inputs ./target/public_inputs --format starkli > ../calldata.txt
+
+# 6. Build the Cairo verifier contract
+
+cd satkey_verifier
+scarb build
 
 (End of file)

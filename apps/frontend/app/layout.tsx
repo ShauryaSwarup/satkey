@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/providers/AuthProvider";
-import Navigation from "@/components/Navigation";
 import "./globals.css";
+import ClientNavigator from "@/components/Navigation/ClientNavigator";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SatKey",
+  title: "SatKey - ₿ on Starknet",
   description: "One click staking for Bitcoin in Starknet.",
 };
 
@@ -30,7 +30,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
-          <Navigation />
+          <ClientNavigator />
           {children}
         </AuthProvider>
       </body>

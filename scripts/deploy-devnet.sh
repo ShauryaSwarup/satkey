@@ -110,30 +110,30 @@ fi
 echo "✅ Verifier class hash: $VERIFIER_CLASS_HASH"
 echo ""
 
-# ── Step 3: Deploy verifier contract ─────────────────────────────────────────
-echo "⏳ Deploying verifier contract..."
-VERIFIER_DEPLOY=$("$SNCAST" \
-  --url "$RPC_URL" \
-  --accounts-file "$ACCOUNTS_FILE" \
-  --account "$ACCOUNT_NAME" \
-  --wait \
-  deploy \
-  --class-hash "$VERIFIER_CLASS_HASH" 2>&1) || true
 
-echo "$VERIFIER_DEPLOY"
 
-VERIFIER_ADDRESS=$(echo "$VERIFIER_DEPLOY" | grep -oE "contract_address: 0x[0-9a-fA-F]+" | head -1 | cut -d' ' -f2)
-if [ -z "$VERIFIER_ADDRESS" ]; then
-  VERIFIER_ADDRESS=$(echo "$VERIFIER_DEPLOY" | grep -oE "0x[0-9a-fA-F]{60,}" | head -1)
-fi
 
-if [ -z "$VERIFIER_ADDRESS" ]; then
-  echo "❌ Failed to deploy verifier"
-  echo "$VERIFIER_DEPLOY"
-  exit 1
-fi
-echo "✅ Verifier deployed at: $VERIFIER_ADDRESS"
-echo ""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # ── Step 4: Declare SatKey account contract ──────────────────────────────────
 echo "⏳ Declaring SatKey account contract..."
@@ -165,7 +165,7 @@ echo "╔═══════════════════════�
 echo "║  Deployment Complete!                        ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
-echo "VERIFIER_ADDRESS=$VERIFIER_ADDRESS"
+echo "VERIFIER_CLASS_HASH=$VERIFIER_CLASS_HASH"
 echo "SATKEY_CLASS_HASH=$SATKEY_CLASS_HASH"
 echo ""
 echo "Copy these to apps/relayer/.env:"
@@ -174,7 +174,7 @@ echo "  STARKNET_RPC_URL=$RPC_URL"
 echo "  RELAYER_ADDRESS=$ACCOUNT_ADDRESS"
 echo "  RELAYER_PRIVATE_KEY=$PRIVATE_KEY"
 echo "  SATKEY_CLASS_HASH=$SATKEY_CLASS_HASH"
-echo "  VERIFIER_ADDRESS=$VERIFIER_ADDRESS"
+echo "  VERIFIER_CLASS_HASH=$VERIFIER_CLASS_HASH"
 echo ""
 
 # ── Write .env file ─────────────────────────────────────────────────────────
@@ -185,6 +185,6 @@ STARKNET_RPC_URL=$RPC_URL
 RELAYER_ADDRESS=$ACCOUNT_ADDRESS
 RELAYER_PRIVATE_KEY=$PRIVATE_KEY
 SATKEY_CLASS_HASH=$SATKEY_CLASS_HASH
-VERIFIER_ADDRESS=$VERIFIER_ADDRESS
+VERIFIER_CLASS_HASH=$VERIFIER_CLASS_HASH
 EOF
 echo "✅ Written to $ENV_FILE"

@@ -38,11 +38,11 @@ export async function POST(request: NextRequest) {
     const rpcUrl = process.env.STARKNET_RPC_URL;
     const deployerAddress = process.env.DEPLOYER_ADDRESS;
     const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY;
-    const classHash = process.env.SATKEY_CLASS_HASH;
-    const verifierAddress = process.env.VERIFIER_ADDRESS;
+    const classHash = process.env.NEXT_PUBLIC_SATKEY_CLASS_HASH;
+    const verifierClassHash = process.env.NEXT_PUBLIC_VERIFIER_CLASS_HASH;
     const avnuApiKey = process.env.AVNU_PAYMASTER_API_KEY;
 
-    if (!rpcUrl || !deployerAddress || !deployerPrivateKey || !classHash || !verifierAddress) {
+    if (!rpcUrl || !deployerAddress || !deployerPrivateKey || !classHash || !verifierClassHash) {
       return NextResponse.json(
         { error: 'Server configuration missing. Check environment variables.' },
         { status: 500 }
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     // Calculate the expected address
     const salt = await deriveStarknetSalt(pubkey);
-    const constructorCalldata = [verifierAddress, num.toHex(salt)];
+    const constructorCalldata = [verifierClassHash, num.toHex(salt)];
     const expectedAddress = starkHash.calculateContractAddressFromHash(
       num.toHex(salt),
       classHash,

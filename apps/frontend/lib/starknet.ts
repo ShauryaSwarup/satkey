@@ -171,7 +171,7 @@ export const STARKNET_NETWORKS: Record<string, StarknetNetwork> = {
   sepolia: {
     name: "Starknet Sepolia",
     chainId: "0x534e5f5345504f4c4941", // SN_SEPOLIA
-    rpcUrl: "https://starknet-sepolia.public.blastapi.io",
+    rpcUrl: "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/cCOvFD0gs7yy-YBEph_J5",
   },
 };
 

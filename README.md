@@ -436,7 +436,7 @@ fn __validate__(ref self: ContractState, calls: Array<Call>) -> felt252 {
     
     // 5. Verify ZK proof on-chain
     let verifier = IGaragaVerifierDispatcher {
-        contract_address: self.verifier_address.read()
+        contract_address: self.verifier_class_hash.read()
     };
     verifier.verify_ultra_keccak_zk_honk_proof(signature);
     
@@ -544,7 +544,7 @@ scarb build
    ```
 
 4. **Configure Relayer**: Set environment variables:
-   - `VERIFIER_ADDRESS`
+   - `VERIFIER_CLASS_HASH`
    - `SATKEY_CLASS_HASH`
    - `RELAYER_PRIVATE_KEY`
    - `STARKNET_RPC_URL`
@@ -562,7 +562,7 @@ See `docs/SEPOLIA_DEPLOYMENT.md` for detailed instructions.
 | `STARKNET_RPC_URL` | Starknet RPC endpoint | Relayer |
 | `RELAYER_PRIVATE_KEY` | Deployer private key | Relayer |
 | `SATKEY_CLASS_HASH` | Account class hash | Relayer |
-| `VERIFIER_ADDRESS` | Verifier contract address | Relayer |
+| `VERIFIER_CLASS_HASH` | Verifier contract address | Relayer |
 | `NARGO_BIN` | Path to nargo binary | Prover |
 | `BB_BIN` | Path to bb binary | Prover |
 

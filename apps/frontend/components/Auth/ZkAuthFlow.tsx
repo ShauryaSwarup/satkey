@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { sha256 } from "@noble/hashes/sha2.js";
-import { concatBytes } from "@noble/hashes/utils.js";
+import { sha256 } from "@noble/hashes/sha2";
+import { concatBytes } from "@noble/hashes/utils";
 import { useAuth } from "@/providers/AuthProvider";
 import { formatStarknetAddress } from "@/lib/starknet";
 import Wallet, { MessageSigningProtocols, RpcErrorCode } from "sats-connect";
@@ -57,6 +57,7 @@ export function ZkAuthFlow({
     btcPubkeyHex,
     predictError,
     isCheckingAccount,
+    setAuthCredentials,
   } = useAuth();
   const [step, setStep] = useState<Step>("idle");
   const [errorMsg, setErrorMsg] = useState<string>("");
@@ -329,6 +330,15 @@ export function ZkAuthFlow({
 
       const deployResult = await deployResponse.json();
       setStarknetAddress(deployResult.accountAddress);
+      // Store credentials for later use (e.g., relaying, session, etc.)
+      setAuthCredentials({
+        pubkey: pubkeyHex,
+        signature_r: r,
+        signature_s: s,
+        message_hash: messageHash,
+        expiry,
+        salt: "", // If you have a salt value, set it here. Otherwise, leave as empty string or fetch as needed.
+      });
       setIsAuthenticated(true);
       setStep("success");
       onComplete?.();

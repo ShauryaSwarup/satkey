@@ -21,6 +21,15 @@ export interface Balance {
   unconfirmed: number;
 }
 
+export interface AuthCredentials {
+  pubkey: string;
+  signature_r: string;
+  signature_s: string;
+  message_hash: string;
+  expiry: string;
+  salt: string;
+}
+
 export interface AuthContextType {
   isConnected: boolean;
   setIsConnected: (val: boolean) => void;
@@ -45,6 +54,8 @@ export interface AuthContextType {
   predictError: string | null;
   setPredictError: (val: string | null) => void;
   isCheckingAccount: boolean;
+  authCredentials: AuthCredentials | null;
+  setAuthCredentials: (val: AuthCredentials | null) => void;
   resetAll: () => Promise<void>;
   connect: () => Promise<void>;
 }
@@ -52,6 +63,8 @@ export interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  // Avoid reading sessionStorage during render to prevent SSR/CSR mismatch.
+  // Initialize to stable defaults and hydrate on the client in useEffect.
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [walletType, setWalletType] = useState<string | null>(null);
   const [walletId, setWalletId] = useState<string | null>(null);
@@ -64,6 +77,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [zkProof, setZkProof] = useState<{ fullProof: string[]; publicSignals: string[] } | null>(null);
   const [predictError, setPredictError] = useState<string | null>(null);
   const [isCheckingAccount, setIsCheckingAccount] = useState<boolean>(false);
+  const [authCredentials, setAuthCredentials] = useState<AuthCredentials | null>(null);
+  // Flag to indicate we've hydrated values from sessionStorage onto state
+  const [storageHydrated, setStorageHydrated] = useState<boolean>(false);
 
   const connect = async () => {
     try {
@@ -112,6 +128,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (err) {
       console.error("[AuthProvider] Failed to disconnect wallet:", err);
     }
+    if (typeof window !== 'undefined') sessionStorage.clear();
     setIsConnected(false);
     setWalletType(null);
     setWalletId(null);
@@ -124,21 +141,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setZkProof(null);
     setPredictError(null);
     setIsCheckingAccount(false);
+    setAuthCredentials(null);
   };
 
-  // Fast-Path Login for Returning Users
+  // Predict Account Address for Returning Users
+  // IMPORTANT: This does NOT authenticate. It only predicts the address so the UI can show it.
+  // ZkAuthFlow must always run to generate fresh credentials, even for returning users.
   useEffect(() => {
+    // Only run after we've hydrated session storage
+    if (!storageHydrated) return;
+
     if (isConnected && btcPubkeyHex && !isAuthenticated) {
-      const checkReturningUser = async () => {
+      const predictAddress = async () => {
         setIsCheckingAccount(true);
         try {
           // Calculate address locally using our starknet utils
           const { deriveExpectedAccountAddress, deriveStarknetSalt } = await import('@/lib/starknet');
           const salt = await deriveStarknetSalt(btcPubkeyHex);
           const classHash = process.env.NEXT_PUBLIC_SATKEY_CLASS_HASH || "0x0";
-          const verifierAddress = process.env.NEXT_PUBLIC_VERIFIER_ADDRESS || "0x0";
+          const verifierClassHash = process.env.NEXT_PUBLIC_VERIFIER_CLASS_HASH || "0x0";
 
-          if (classHash === "0x0" || verifierAddress === "0x0") {
+          if (classHash === "0x0" || verifierClassHash === "0x0") {
             setPredictError("Frontend not configured with class hash");
             setIsCheckingAccount(false);
             return;
@@ -147,38 +170,74 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const accountAddress = deriveExpectedAccountAddress(
             salt,
             classHash,
-            [verifierAddress, "0x" + salt.toString(16)]
+            [verifierClassHash, "0x" + salt.toString(16)]
           );
           setPredictError(null);
           setStarknetAddress(accountAddress);
-
-          // Check deployment status via API
-          const res = await fetch('/api/deploy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pubkey: btcPubkeyHex }),
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            if (data.alreadyDeployed) {
-              console.log('[AuthProvider] Returning user detected, auto-authenticating:', data.accountAddress);
-              setIsAuthenticated(true);
-            }
-          } else {
-            const errorData = await res.json().catch(() => ({ error: 'Failed to fetch status' }));
-            console.error('[AuthProvider] Deploy API error:', errorData.error);
-          }
         } catch (err) {
-          console.error('[AuthProvider] Failed to check returning user status:', err);
+          console.error('[AuthProvider] Failed to predict account address:', err);
           setPredictError('Connection failed');
         } finally {
           setIsCheckingAccount(false);
+          // NOTE: We do NOT set isAuthenticated here.
+          // ZkAuthFlow must run to generate fresh credentials for bridging.
         }
       };
-      checkReturningUser();
+      predictAddress();
     }
-  }, [isConnected, btcPubkeyHex, isAuthenticated]);
+  }, [isConnected, btcPubkeyHex, isAuthenticated, storageHydrated]);
+
+  // Hydrate from sessionStorage on first client render
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const storedIsConnected = sessionStorage.getItem('satkey_isConnected');
+      const storedAddresses = sessionStorage.getItem('satkey_addresses');
+      const storedStarknetAddress = sessionStorage.getItem('satkey_starknetAddress');
+      const storedBtcPubkeyHex = sessionStorage.getItem('satkey_btcPubkeyHex');
+      const storedIsAuthenticated = sessionStorage.getItem('satkey_isAuthenticated');
+      const storedAuthCredentials = sessionStorage.getItem('satkey_authCredentials');
+
+      if (storedIsConnected !== null) setIsConnected(storedIsConnected === 'true');
+      if (storedAddresses) {
+        try {
+          setAddresses(JSON.parse(storedAddresses));
+        } catch (e) {
+          console.warn('[AuthProvider] Failed to parse stored addresses', e);
+        }
+      }
+      if (storedStarknetAddress) setStarknetAddress(storedStarknetAddress || null);
+      if (storedBtcPubkeyHex) setBtcPubkeyHex(storedBtcPubkeyHex || null);
+      if (storedIsAuthenticated !== null) setIsAuthenticated(storedIsAuthenticated === 'true');
+      if (storedAuthCredentials) {
+        try {
+          setAuthCredentials(JSON.parse(storedAuthCredentials));
+        } catch (e) {
+          console.warn('[AuthProvider] Failed to parse stored auth credentials', e);
+        }
+      }
+    } catch (err) {
+      console.error('[AuthProvider] Error hydrating from sessionStorage', err);
+    } finally {
+      setStorageHydrated(true);
+    }
+  }, []);
+
+  // Persist relevant values to sessionStorage whenever they change
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      sessionStorage.setItem('satkey_isConnected', String(isConnected));
+      sessionStorage.setItem('satkey_addresses', JSON.stringify(addresses));
+      sessionStorage.setItem('satkey_starknetAddress', starknetAddress || '');
+      sessionStorage.setItem('satkey_btcPubkeyHex', btcPubkeyHex || '');
+      sessionStorage.setItem('satkey_isAuthenticated', String(isAuthenticated));
+      sessionStorage.setItem('satkey_authCredentials', JSON.stringify(authCredentials));
+    } catch (err) {
+      console.error('[AuthProvider] Error persisting to sessionStorage', err);
+    }
+  }, [isConnected, addresses, starknetAddress, btcPubkeyHex, isAuthenticated, authCredentials]);
 
   return (
     <AuthContext.Provider
@@ -208,6 +267,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isCheckingAccount,
         resetAll,
         connect,
+        authCredentials,
+        setAuthCredentials,
       }}
     >
       {children}
