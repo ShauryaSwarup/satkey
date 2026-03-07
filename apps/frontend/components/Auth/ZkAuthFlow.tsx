@@ -253,10 +253,9 @@ export function ZkAuthFlow({
         nonce = "0";
       }
 
-      const expiry = (Date.now() + 5 * 60 * 1000).toString(); // 5 minutes
-      const message = `Authenticate with Sat Key\n\nNonce: ${nonce}\nExpiry: ${expiry}\n\nSign this message to prove ownership of your wallet and generate a Zero-Knowledge Proof for Starknet.`;
+      const expiry = Math.floor(Date.now() / 1000 + 5 * 60).toString(); // Unix timestamp in seconds
+      const message = `login:${nonce}:${expiry}`;
 
-      // Step 1: Sign message with Bitcoin wallet
       const signResponse = await Wallet.request("signMessage", {
         address: addressToSign,
         message,
@@ -264,52 +263,32 @@ export function ZkAuthFlow({
       });
 
       if (signResponse.status !== "success") {
-        throw new Error(
-          signResponse.error?.message || "Failed to sign message",
-        );
+        throw new Error(signResponse.error?.message || "Failed to sign message");
       }
 
       const signature = signResponse.result.signature;
 
-      // Parse signature into r, s components
-      const { r, s } = parseSignatureToRS(signature);
-
-      // Step 2: Compute message hash
-      const messageHash = computeMessageHash(message);
-
-      // Step 3: Get public key hex - CRITICAL: Must use the SAME payment address's pubkey
-      // that we're signing with, NOT btcPubkeyHex (which may be stale or wrong key)
-      if (!paymentAddressObj?.publicKey) {
-        setErrorMsg(
-          "Payment address missing public key - cannot generate ZK proof",
-        );
-        setStep("error");
-        return;
-      }
-      const pubkeyHex = paymentAddressObj.publicKey;
-
-      // Step 4: Call prover service to generate ZK proof
       setStep("proving");
 
       const proveResponse = await fetch(`${PROVER_URL}/prove`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pubkey: pubkeyHex,
-          signature_r: r,
-          signature_s: s,
-          message_hash: messageHash,
+          pubkey: btcPubkeyHex,
+          address: addressToSign,
+          message,
+          signature,
           nonce,
           expiry,
         }),
       });
 
       if (!proveResponse.ok) {
-        const error = await proveResponse.text();
-        throw new Error(`Prover error: ${error}`);
+        throw new Error(`Prover error: ${await proveResponse.text()}`);
       }
 
       const proofData = await proveResponse.json();
+      const salt = proofData.salt;
       setZkProof(proofData);
       setStep("deploying");
 
@@ -319,7 +298,8 @@ export function ZkAuthFlow({
         body: JSON.stringify({
           fullProof: proofData.fullProof,
           publicSignals: proofData.publicSignals,
-          pubkey: pubkeyHex,
+          pubkey: btcPubkeyHex,
+          salt: salt,
         }),
       });
 
@@ -332,12 +312,13 @@ export function ZkAuthFlow({
       setStarknetAddress(deployResult.accountAddress);
       // Store credentials for later use (e.g., relaying, session, etc.)
       setAuthCredentials({
-        pubkey: pubkeyHex,
-        signature_r: r,
-        signature_s: s,
-        message_hash: messageHash,
+        pubkey: btcPubkeyHex,
+        address: addressToSign,
+        message,
+        signature,
+        salt,
         expiry,
-        salt: "", // If you have a salt value, set it here. Otherwise, leave as empty string or fetch as needed.
+        nonce,
       });
       setIsAuthenticated(true);
       setStep("success");
