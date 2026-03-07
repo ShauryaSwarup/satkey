@@ -1,19 +1,18 @@
 /**
  * Deploy Account API Route
- * 
+ *
  * Deploys a SatKey account using the Universal Deployer Contract (UDC).
- * Uses AVNU paymaster for gas-free transactions (you sponsor, user pays nothing).
+ * Uses AVNU paymaster for gas-free transactions.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { RpcProvider, Account, num, hash as starkHash, PaymasterRpc, PaymasterDetails } from 'starknet';
-import { deriveStarknetSalt } from '@/lib/starknet';
 
 const UDC_ADDRESS = '0x041a78e741e5af2fec34b695679bc6891742439f7afb8484ecd7766661ad02bf';
 
 export interface DeployRequest {
   pubkey: string;
   fullProof?: string[];
-  publicSignals?: string[];
+  publicSignals?: string[];  // [salt, message_hash_field, nonce, expiry] from circuit
 }
 
 export interface DeployResponse {
@@ -34,7 +33,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get environment variables
     const rpcUrl = process.env.STARKNET_RPC_URL;
     const deployerAddress = process.env.DEPLOYER_ADDRESS;
     const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY;
@@ -49,11 +47,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Set up provider
+    // FIX: Use publicSignals[0] (salt from the circuit's Poseidon output) rather than
+    // re-deriving it via a JS Poseidon library. The circuit output is authoritative —
+    // any divergence between the JS and BN254 Poseidon implementations would silently
+    // produce a wrong address. If no publicSignals yet (pre-proof gating check path),
+    // fall back to JS derivation only for the address prediction step.
+    let salt: bigint;
+    if (publicSignals && publicSignals.length >= 1) {
+      const STARK_FIELD_PRIME = BigInt(
+        "0x0800000000000011000000000000000000000000000000000000000000000001"
+      );
+      salt = BigInt(publicSignals[0]) % STARK_FIELD_PRIME;
+    } else {
+      // Pre-proof path: address prediction only (not deploying yet).
+      // We must re-derive here because we don't have the circuit output yet.
+      const { deriveStarknetSalt } = await import('@/lib/starknet');
+      salt = await deriveStarknetSalt(pubkey);
+    }
+
     const provider = new RpcProvider({ nodeUrl: rpcUrl });
 
-    // Calculate the expected address
-    const salt = await deriveStarknetSalt(pubkey);
     const constructorCalldata = [verifierClassHash, num.toHex(salt)];
     const expectedAddress = starkHash.calculateContractAddressFromHash(
       num.toHex(salt),
@@ -72,11 +85,10 @@ export async function POST(request: NextRequest) {
         alreadyDeployed: true,
       } as DeployResponse);
     } catch {
-      // Not deployed, continue to gating check
+      // Not deployed, continue
     }
 
-    // 2. Gating Check: If no proof provided, do NOT deploy.
-    // Just return the status so the frontend can trigger the ZK flow.
+    // 2. No proof → return address for UI gating, do not deploy
     if (!fullProof || !publicSignals) {
       return NextResponse.json({
         accountAddress,
@@ -85,14 +97,12 @@ export async function POST(request: NextRequest) {
       } as DeployResponse);
     }
 
-    // 3. Deployment Flow (Authorized by ZKP)
-    // Set up AVNU paymaster
+    // 3. Deploy
     const paymaster = new PaymasterRpc({
       nodeUrl: 'https://sepolia.paymaster.avnu.fi',
       headers: { 'x-paymaster-api-key': avnuApiKey || '' },
     });
 
-    // Create deployer account WITH paymaster in constructor
     const deployerAccount = new Account({
       provider,
       address: deployerAddress,
@@ -101,7 +111,6 @@ export async function POST(request: NextRequest) {
       paymaster,
     });
 
-    // Build UDC deployment call
     const deployCalldata = [
       classHash,
       num.toHex(salt),
@@ -110,7 +119,6 @@ export async function POST(request: NextRequest) {
       ...constructorCalldata,
     ];
 
-    // Execute with AVNU sponsored paymaster
     const feesDetails: PaymasterDetails = {
       feeMode: { mode: 'sponsored' },
     };
