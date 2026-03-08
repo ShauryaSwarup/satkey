@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BridgeInput } from "./BridgeInput";
 import { SwapHistory } from "./SwapHistory";
 import { SwapProgress } from "./SwapProgress";
+import { SwapDetails } from "./SwapDetails";
 import { ActiveSwap } from "@/lib/supabase/types";
 
 type Step = "input" | "quote" | "signing" | "confirming" | "success";
@@ -20,7 +21,7 @@ type View = "new" | "active";
 
 const PROVER_URL = process.env.NEXT_PUBLIC_PROVER_URL || "http://localhost:3001";
 const STARKNET_RPC_URL = "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/cCOvFD0gs7yy-YBEph_J5";
-const REQUIRED_CONFIRMATIONS = 1;
+ 
 
 enum SpvFromBTCSwapState {
   CLOSED = -5,
@@ -54,6 +55,7 @@ export function BridgeFlow() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [automaticSettlementFailed, setAutomaticSettlementFailed] = useState(false);
   const [activeSwaps, setActiveSwaps] = useState<ActiveSwap[]>([]);
+  const [selectedSwap, setSelectedSwap] = useState<ActiveSwap | null>(null);
   const [isLoadingSwaps, setIsLoadingSwaps] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
   const [btcBalance, setBtcBalance] = useState<string | null>(null);
@@ -169,8 +171,9 @@ export function BridgeFlow() {
         const swapper = await getAtomiqSwapper();
         const paymentAddress = addresses.find(a => a.purpose === AddressPurpose.Payment)?.address;
         if (!paymentAddress) return;
-        const { balance: btcBalance } = await swapper!.Utils.getBitcoinSpendableBalance(paymentAddress, "STARKNET");
-        setBtcBalance(btcBalance.amount);
+        const btcResult = await swapper!.Utils.getBitcoinSpendableBalance(paymentAddress, "STARKNET");
+        const btcBal = btcResult?.balance?.amount ?? (btcResult as any)?.amount ?? null;
+        setBtcBalance(btcBal ?? null);
       } catch (err) {
         console.error('Failed to fetch BTC balance:', err);
       } finally {
@@ -221,16 +224,16 @@ export function BridgeFlow() {
       if (!paymentAddress) throw new Error("No payment address found");
 
       if (isReversed) {
-        if (!starknetAddress || !authCredentials) {
+        const starknetAddressLocal = starknetAddress;
+        if (!starknetAddressLocal || !authCredentials) {
           setError("No Starknet address or auth credentials found");
           setIsProcessing(false);
           setStep("input");
           return;
         }
         const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
-        // Call get_nonce function on the SatKeyAccount contract directly
         const nonceResult = await provider.callContract({
-          contractAddress: starknetAddress,
+          contractAddress: starknetAddressLocal,
           entrypoint: 'get_nonce',
           calldata: []
         });
@@ -250,7 +253,7 @@ export function BridgeFlow() {
 
         const account = new Account({
           provider,
-          address: starknetAddress,
+          address: starknetAddressLocal,
           signer,
         });
 
@@ -383,8 +386,8 @@ export function BridgeFlow() {
     setIsProcessing(true);
 
     try {
+      if (!starknetAddress) throw new Error("No Starknet address found");
       const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
-      // Call get_nonce function on the SatKeyAccount contract directly
       const nonceResult = await provider.callContract({
         contractAddress: starknetAddress,
         entrypoint: 'get_nonce',
@@ -405,9 +408,11 @@ export function BridgeFlow() {
       });
 
       if (!starknetAddress) throw new Error("No Starknet address found");
+      const starknetAddressLocal = starknetAddress;
+      if (!starknetAddressLocal) throw new Error("No Starknet address found");
       const account = new Account({
         provider,
-        address: starknetAddress,
+        address: starknetAddressLocal,
         signer
       });
       await (swap as SpvFromBTCSwap<any>).claim(account);
@@ -425,10 +430,24 @@ export function BridgeFlow() {
     const onStateChange = async (s: any) => {
       const newState = s.getState();
       setSwapState(newState);
-      if (btcPubkeyHex) {
-        await supabase.from('active_swaps')
-          .update({ swap_state: newState })
-          .eq('btc_pubkey', btcPubkeyHex);
+      // Only update the DB row for the specific transaction when we know txId.
+      // Previously we updated by btc_pubkey only which accidentally updated all
+      // swaps for that pubkey whenever any swap instance changed state.
+      try {
+        if (btcPubkeyHex && txId) {
+          await supabase.from('active_swaps')
+            .update({ swap_state: newState })
+            .eq('btc_pubkey', btcPubkeyHex)
+            .eq('tx_id', txId);
+        } else {
+          // txId not yet set: skip DB update to avoid clobbering other records.
+          // The UI state (swapState) is still updated above for the active flow.
+          // Once txId becomes available the code paths that set txId will persist
+          // the proper swap_state into the DB (see onSourceTransactionSent / commit handler).
+          console.warn('[BridgeFlow] txId not available; skipping swap_state DB update to avoid mass-updates');
+        }
+      } catch (err) {
+        console.error('Failed to update swap_state in active_swaps:', err);
       }
     };
     swap.events.on("swapState", onStateChange);
@@ -445,9 +464,11 @@ export function BridgeFlow() {
     setAutomaticSettlementFailed(false);
     setError(null);
     setHasFetched(false);
+    setSelectedSwap(null);
   };
 
   const handleSelectSwap = (activeSwap: ActiveSwap) => {
+    setSelectedSwap(activeSwap);
     setView("active");
     setAmount(activeSwap.amount);
     setTxId(activeSwap.tx_id);
@@ -457,7 +478,15 @@ export function BridgeFlow() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row justify-between items-center w-full h-[calc(100vh-6rem)] py-8 px-4">
+    <div className="flex flex-col lg:flex-row justify-between items-center w-full h-[calc(100vh-6rem)] py-8 px-4 gap-4">
+      {view === "active" && (
+        <button
+          onClick={resetFlow}
+          className="mb-0 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium transition-colors border border-white/10"
+        >
+          ← Back to Bridge
+        </button>
+      )}
       <div className="w-full max-w-md relative">
         <div className="absolute -inset-1 bg-gradient-to-r from-orange-500/20 to-amber-500/20 rounded-3xl blur-xl opacity-50" />
         <div className="relative bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-6 overflow-hidden shadow-2xl">
@@ -506,14 +535,32 @@ export function BridgeFlow() {
             )}
 
             {step === "confirming" && (
-              <SwapProgress
-                confirmations={confirmations}
-                swapState={swapState}
-                txId={txId}
-                automaticSettlementFailed={automaticSettlementFailed}
-                isProcessing={isProcessing}
-                onManualClaim={handleManualClaim}
-              />
+              view === "active" ? (
+                selectedSwap ? (
+                  <SwapDetails swap={selectedSwap} />
+                ) : (
+                  // Fallback to progress if for some reason selectedSwap is null
+                  <SwapProgress
+                    confirmations={confirmations}
+                    swapState={swapState}
+                    txId={txId}
+                    automaticSettlementFailed={automaticSettlementFailed}
+                    isProcessing={isProcessing}
+                    isReversed={isReversed}
+                    onManualClaim={handleManualClaim}
+                  />
+                )
+              ) : (
+                <SwapProgress
+                  confirmations={confirmations}
+                  swapState={swapState}
+                  txId={txId}
+                  automaticSettlementFailed={automaticSettlementFailed}
+                  isProcessing={isProcessing}
+                  isReversed={isReversed}
+                  onManualClaim={handleManualClaim}
+                />
+              )
             )}
 
             {step === "success" && (

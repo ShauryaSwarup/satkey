@@ -58,7 +58,9 @@ export function SwapHistory({ swaps, isLoading, onSelectSwap }: SwapHistoryProps
             className="w-full p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-orange-500/30 transition-all text-left group"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-white font-medium">{swap.amount} BTC</span>
+              <span className="text-white font-medium">
+                {swap.amount} {swap.swap_type === "STRK_TO_BTC" ? "STRK" : "BTC"}
+              </span>
               <span className="text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-400">
                 {swap.confirmations}/1
               </span>
@@ -69,7 +71,11 @@ export function SwapHistory({ swaps, isLoading, onSelectSwap }: SwapHistoryProps
                 {new Date(swap.created_at).toLocaleString()}
               </span>
               <a
-                href={`https://mempool.space/testnet4/tx/${swap.tx_id}`}
+                href=
+                {swap.swap_type === "STRK_TO_BTC"
+                        ? `https://sepolia.voyager.online/tx/${swap.tx_id}`
+                        : `https://mempool.space/testnet4/tx/${swap.tx_id}`
+                }
                 target="_blank"
                 rel="noreferrer"
                 onClick={(e) => e.stopPropagation()}

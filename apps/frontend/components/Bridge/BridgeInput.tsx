@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Loader2, Bitcoin, ArrowRightLeft } from "lucide-react";
 import { getAtomiqSwapper } from "@/lib/atomiq";
 import Wallet, { AddressPurpose } from "sats-connect";
+import { useAuth } from "@/providers/AuthProvider";
 
 interface BridgeInputProps {
   amount: string;
@@ -24,18 +25,17 @@ interface BridgeInputProps {
 
 export function BridgeInput({ amount, setAmount, onContinue, isProcessing, error, starknetAddress, balance, isLoadingBalance, isReversed, setIsReversed, outputAmount, setOutputAmount, isFetchingQuote }: BridgeInputProps) {
   const [feeRate, setFeeRate] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const { addresses } = useAuth();
 
   useEffect(() => {
     const fetchFeeRate = async () => {
       if (isReversed) return;
+      if (!addresses.length || isReversed) return;
+      setIsLoading(true);
       try {
         const swapper = await getAtomiqSwapper();
-        const response = await Wallet.request('getAccounts', {
-          purposes: [AddressPurpose.Payment],
-          message: 'Check fee rate'
-        });
-        if (response.status !== 'success') return;
-        const paymentAddress = (response.result as any[]).find((a: any) => a.purpose === AddressPurpose.Payment)?.address;
+        const paymentAddress = addresses.find(a => a.purpose === AddressPurpose.Payment)?.address;
         if (!paymentAddress) return;
         if (swapper) {
           const { feeRate: btcFeeRate } = await swapper.Utils.getBitcoinSpendableBalance(paymentAddress, "STARKNET");
@@ -43,10 +43,12 @@ export function BridgeInput({ amount, setAmount, onContinue, isProcessing, error
         }
       } catch (err) {
         console.error('Failed to fetch fee rate:', err);
+      } finally {
+        setIsLoading(false);
       }
     };
     fetchFeeRate();
-  }, [isReversed]);
+  }, [addresses, isReversed]);
 
   const setPercentage = (percent: number) => {
     if (balance) {
@@ -98,6 +100,8 @@ export function BridgeInput({ amount, setAmount, onContinue, isProcessing, error
               placeholder="0.00"
               className="w-full bg-transparent text-2xl text-white placeholder:text-white/20 focus:outline-none"
             />
+            {!isReversed && feeRate === null && !isLoading && <p className="text-xs text-red-400">Failed to fetch fee rate</p>}
+            {!isReversed && isLoading && <p className="text-xs text-white/40">Loading fee rate...</p>}
             {!isReversed && feeRate && <p className="text-xs text-white/40">Fee Rate: {feeRate} sat/vB</p>}
           </div>
           {/* Percentage Buttons */}

@@ -25,6 +25,7 @@ interface SwapProgressProps {
   txId: string;
   automaticSettlementFailed: boolean;
   isProcessing: boolean;
+  isReversed: boolean;
   onManualClaim: () => void;
 }
 
@@ -36,8 +37,21 @@ export function SwapProgress({
   txId, 
   automaticSettlementFailed, 
   isProcessing, 
+  isReversed,
   onManualClaim 
 }: SwapProgressProps) {
+  // Dynamic labels depending on direction:
+  // isReversed === true  => STRK -> BTC
+  // isReversed === false => BTC -> STRK
+  const header = swapState === SpvFromBTCSwapState.FRONTED ? "Swap Fronted!" : "Confirming";
+  const description = swapState === SpvFromBTCSwapState.FRONTED
+    ? (isReversed ? "Funds have been sent to your Bitcoin address early!" : "Funds have been sent to your Starknet wallet early!")
+    : (isReversed ? "Waiting for Starknet network confirmations..." : "Waiting for Bitcoin network confirmations...");
+
+  const step1Label = isReversed ? "Starknet Transaction Submitted" : "Bitcoin Transaction Broadcasted";
+  const step2Label = isReversed ? "Starknet Confirmed" : "Bitcoin Confirmed";
+  const step3Label = isReversed ? "Bitcoin Transaction Sent" : "Starknet Funds Claimed";
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -67,14 +81,8 @@ export function SwapProgress({
           </div>
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-white mb-2">
-            {swapState === SpvFromBTCSwapState.FRONTED ? "Swap Fronted!" : "Confirming"}
-          </h2>
-          <p className="text-white/60 text-sm">
-            {swapState === SpvFromBTCSwapState.FRONTED 
-              ? "Funds have been sent to your Starknet wallet early!"
-              : "Waiting for Bitcoin network confirmations..."}
-          </p>
+          <h2 className="text-2xl font-bold text-white mb-2">{header}</h2>
+          <p className="text-white/60 text-sm">{description}</p>
         </div>
       </div>
 
@@ -83,19 +91,19 @@ export function SwapProgress({
           <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold", swapState && swapState >= SpvFromBTCSwapState.BROADCASTED ? "bg-green-500/20 text-green-400" : "bg-white/10 text-white/40")}>
             {swapState && swapState >= SpvFromBTCSwapState.BROADCASTED ? <Check className="w-3 h-3" /> : "1"}
           </div>
-          <p className="text-sm font-medium text-white">Bitcoin Transaction Broadcasted</p>
+          <p className="text-sm font-medium text-white">{step1Label}</p>
         </div>
         <div className="flex items-center gap-4 p-3 rounded-xl bg-white/5 border border-white/5">
           <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold", confirmations >= REQUIRED_CONFIRMATIONS ? "bg-green-500/20 text-green-400" : "bg-white/10 text-white/40")}>
             {confirmations >= REQUIRED_CONFIRMATIONS ? <Check className="w-3 h-3" /> : "2"}
           </div>
-          <p className="text-sm font-medium text-white">Bitcoin Confirmed</p>
+          <p className="text-sm font-medium text-white">{step2Label}</p>
         </div>
         <div className="flex items-center gap-4 p-3 rounded-xl bg-white/5 border border-white/5">
           <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold", swapState === SpvFromBTCSwapState.CLAIM_CLAIMED ? "bg-green-500/20 text-green-400" : "bg-white/10 text-white/40")}>
             {swapState === SpvFromBTCSwapState.CLAIM_CLAIMED ? <Check className="w-3 h-3" /> : "3"}
           </div>
-          <p className="text-sm font-medium text-white">Starknet Funds Claimed</p>
+          <p className="text-sm font-medium text-white">{step3Label}</p>
         </div>
       </div>
 
@@ -105,7 +113,14 @@ export function SwapProgress({
             <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Transaction ID</p>
             <p className="text-sm text-white font-mono">{txId.slice(0, 8)}...{txId.slice(-6)}</p>
           </div>
-          <a href={`https://mempool.space/testnet4/tx/${txId}`} target="_blank" rel="noreferrer" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors">
+          <a 
+            href={isReversed
+                        ? `https://sepolia.voyager.online/tx/${txId}`
+                        : `https://mempool.space/testnet4/tx/${txId}`
+                  } 
+            target="_blank" rel="noreferrer" 
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+          >
             <ExternalLink className="w-4 h-4" />
           </a>
         </div>

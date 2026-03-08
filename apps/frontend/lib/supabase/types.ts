@@ -25,4 +25,8 @@ export type ActiveSwap = {
   quote_expiry: number;
   /** ISO-8601 timestamp when the swap was created */
   created_at: string;
+  /** ISO-8601 timestamp when the swap was last updated */
+  updated_at: string;
+  /** Swap direction indicating the source and destination chains */
+  swap_type: "STRK_TO_BTC" | "BTC_TO_STRK";
 };
