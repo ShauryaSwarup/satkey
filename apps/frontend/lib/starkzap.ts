@@ -1,6 +1,6 @@
 import { StarkZap } from "starkzap";
 
-const avnuApiKey = process.env.AVNU_PAYMASTER_SEPOLIA_KEY;
+const avnuApiKey = "cc98d665-ba65-4483-8f1f-4b4d25a750ce";
 
 export const sdk = new StarkZap({
   network: "sepolia",

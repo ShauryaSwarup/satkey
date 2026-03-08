@@ -60,18 +60,10 @@ declare module '@atomiqlabs/sdk' {
       // Some SDK endpoints return feeRate at the top-level, others nest it under `balance`.
       // We reflect both shapes so the UI can destructure either form safely.
       getBitcoinSpendableBalance(address: string, forChain?: string): Promise<{ feeRate?: number; balance?: { amount: string; feeRate?: number } }>;
-      getSpendableBalance(address: string, token: any): Promise<{ amount: string; feeRate?: number } >;
+      getSpendableBalance(address: string, token: any): Promise<{ amount: string; feeRate?: number }>;
     };
     Tokens?: any;
   }
 
   export { SwapperFactory as default };
-}
-
-declare module 'starkzap' {
-  export type StarkZapOptions = { network?: string; paymaster?: { nodeUrl: string; headers?: Record<string, string> } };
-  export class StarkZap {
-    constructor(opts?: StarkZapOptions);
-  }
-  export default StarkZap;
 }

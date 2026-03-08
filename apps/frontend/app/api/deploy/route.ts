@@ -1,18 +1,14 @@
-/**
- * Deploy Account API Route
- *
- * Deploys a SatKey account using the Universal Deployer Contract (UDC).
- * Uses AVNU paymaster for gas-free transactions.
- */
 import { NextRequest, NextResponse } from 'next/server';
-import { RpcProvider, Account, num, hash as starkHash, PaymasterRpc, PaymasterDetails } from 'starknet';
+import { num, RpcProvider, hash as starkHash } from 'starknet';
+import { StarkSigner } from 'starkzap';
+import { sdk } from '@/lib/starkzap';
 
 const UDC_ADDRESS = '0x041a78e741e5af2fec34b695679bc6891742439f7afb8484ecd7766661ad02bf';
 
 export interface DeployRequest {
   pubkey: string;
   fullProof?: string[];
-  publicSignals?: string[];  // [salt, message_hash_field, nonce, expiry] from circuit
+  publicSignals?: string[];
 }
 
 export interface DeployResponse {
@@ -33,39 +29,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rpcUrl = process.env.STARKNET_RPC_URL;
-    const deployerAddress = process.env.DEPLOYER_ADDRESS;
     const deployerPrivateKey = process.env.DEPLOYER_PRIVATE_KEY;
     const classHash = process.env.NEXT_PUBLIC_SATKEY_CLASS_HASH;
     const verifierClassHash = process.env.NEXT_PUBLIC_VERIFIER_CLASS_HASH;
-    const avnuApiKey = process.env.AVNU_PAYMASTER_API_KEY;
 
-    if (!rpcUrl || !deployerAddress || !deployerPrivateKey || !classHash || !verifierClassHash) {
+    if (!deployerPrivateKey || !classHash || !verifierClassHash) {
       return NextResponse.json(
         { error: 'Server configuration missing. Check environment variables.' },
         { status: 500 }
       );
     }
 
-    // FIX: Use publicSignals[0] (salt from the circuit's Poseidon output) rather than
-    // re-deriving it via a JS Poseidon library. The circuit output is authoritative —
-    // any divergence between the JS and BN254 Poseidon implementations would silently
-    // produce a wrong address. If no publicSignals yet (pre-proof gating check path),
-    // fall back to JS derivation only for the address prediction step.
+    // Derive salt — trust circuit output if available
     let salt: bigint;
     if (publicSignals && publicSignals.length >= 1) {
       const STARK_FIELD_PRIME = BigInt(
-        "0x0800000000000011000000000000000000000000000000000000000000000001"
+        '0x0800000000000011000000000000000000000000000000000000000000000001'
       );
       salt = BigInt(publicSignals[0]) % STARK_FIELD_PRIME;
     } else {
-      // Pre-proof path: address prediction only (not deploying yet).
-      // We must re-derive here because we don't have the circuit output yet.
       const { deriveStarknetSalt } = await import('@/lib/starknet');
       salt = await deriveStarknetSalt(pubkey);
     }
-
-    const provider = new RpcProvider({ nodeUrl: rpcUrl });
 
     const constructorCalldata = [verifierClassHash, num.toHex(salt)];
     const expectedAddress = starkHash.calculateContractAddressFromHash(
@@ -76,19 +61,33 @@ export async function POST(request: NextRequest) {
     );
     const accountAddress = num.toHex(expectedAddress);
 
-    // 1. Check if already deployed
+    const provider = new RpcProvider({ nodeUrl: process.env.STARKNET_RPC_URL! });
+    let alreadyDeployed = false;
     try {
+      // 1. Check if already deployed by querying class hash at address
       await provider.getClassHashAt(accountAddress);
+      alreadyDeployed = true;
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Contract not found')) {
+        alreadyDeployed = false;
+      } else {
+        throw err;
+      }
+    }
+    if (alreadyDeployed) {
       return NextResponse.json({
         accountAddress,
         transactionHash: '0x0',
         alreadyDeployed: true,
       } as DeployResponse);
-    } catch {
-      // Not deployed, continue
     }
+    // Connect deployer wallet via StarkZap
+    const signer = new StarkSigner(deployerPrivateKey);
+    const deployerWallet = await sdk.connectWallet({
+      account: { signer },
+    });
 
-    // 2. No proof → return address for UI gating, do not deploy
+    // 2. No proof → return address for UI gating only, do not deploy
     if (!fullProof || !publicSignals) {
       return NextResponse.json({
         accountAddress,
@@ -97,20 +96,7 @@ export async function POST(request: NextRequest) {
       } as DeployResponse);
     }
 
-    // 3. Deploy
-    const paymaster = new PaymasterRpc({
-      nodeUrl: 'https://sepolia.paymaster.avnu.fi',
-      headers: { 'x-paymaster-api-key': avnuApiKey || '' },
-    });
-
-    const deployerAccount = new Account({
-      provider,
-      address: deployerAddress,
-      signer: deployerPrivateKey,
-      cairoVersion: '1',
-      paymaster,
-    });
-
+    // 3. Deploy via UDC with sponsored fees
     const deployCalldata = [
       classHash,
       num.toHex(salt),
@@ -119,11 +105,7 @@ export async function POST(request: NextRequest) {
       ...constructorCalldata,
     ];
 
-    const feesDetails: PaymasterDetails = {
-      feeMode: { mode: 'sponsored' },
-    };
-
-    const result = await deployerAccount.executePaymasterTransaction(
+    const tx = await deployerWallet.execute(
       [
         {
           contractAddress: UDC_ADDRESS,
@@ -131,14 +113,14 @@ export async function POST(request: NextRequest) {
           calldata: deployCalldata,
         },
       ],
-      feesDetails
+      { feeMode: 'sponsored' }
     );
 
-    await provider.waitForTransaction(result.transaction_hash);
+    await tx.wait();
 
     return NextResponse.json({
       accountAddress,
-      transactionHash: result.transaction_hash,
+      transactionHash: tx.hash,
       alreadyDeployed: false,
     } as DeployResponse);
   } catch (error) {
