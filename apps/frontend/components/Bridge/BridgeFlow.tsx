@@ -38,10 +38,6 @@ enum SpvFromBTCSwapState {
 }
 
 export function BridgeFlow() {
-  /**
-   * Supabase client
-   * Browser client must be created in client components
-   */
   const supabase = useMemo(() => createClient(), []);
 
   const [view, setView] = useState<View>("new");
@@ -82,9 +78,7 @@ export function BridgeFlow() {
         const Tokens = factory.Tokens;
         if (isReversed) {
           const addr = addresses.find(a => a.purpose === AddressPurpose.Payment)?.address;
-          console.log("Fetching quote for STRK -> BTC", { amount, addr, starknetAddress: starknetAddress, addrType: typeof addr });
           if (!addr) throw new Error("No payment address found for quote");
-          // Ensure starknetAddress is in proper format (0x-prefixed hex)
           const formattedStarknetAddress = starknetAddress?.startsWith('0x') ? starknetAddress : `0x${starknetAddress}`;
           const swapInstance = await swapper!.swap(
             Tokens.STARKNET.STRK,
@@ -94,8 +88,6 @@ export function BridgeFlow() {
             formattedStarknetAddress,
             addr,
           );
-
-
 
           const output = swapInstance.getOutput().toString();
           setOutputAmount(output);
@@ -123,7 +115,6 @@ export function BridgeFlow() {
           starknetAddress,
         );
 
-
         const output = swapInstance.getOutput().toString();
         setOutputAmount(output);
         setSwap(swapInstance);
@@ -149,7 +140,7 @@ export function BridgeFlow() {
 
     const timeoutId = setTimeout(fetchQuote, 500);
     return () => clearTimeout(timeoutId);
-  }, [amount, starknetAddress, isReversed]);
+  }, [amount, starknetAddress, isReversed, addresses]);
 
   useEffect(() => {
     const fetchActiveSwaps = async () => {
@@ -219,7 +210,6 @@ export function BridgeFlow() {
     setStep("signing");
 
     try {
-      // Ensure we have the required credentials before proceeding
       if (!btcPubkeyHex) {
         setError("Please connect your wallet");
         setIsProcessing(false);
@@ -231,7 +221,6 @@ export function BridgeFlow() {
       if (!paymentAddress) throw new Error("No payment address found");
 
       if (isReversed) {
-        // STRK -> BTC: Use Starknet signer
         if (!starknetAddress || !authCredentials) {
           setError("No Starknet address or auth credentials found");
           setIsProcessing(false);
@@ -239,7 +228,6 @@ export function BridgeFlow() {
           return;
         }
 
-        // Create Starknet account with SatKeySigner
         const signer = new SatKeySigner({
           proverUrl: PROVER_URL,
           btcProofInputs: {
@@ -259,33 +247,24 @@ export function BridgeFlow() {
           signer
         });
 
-        // Manual commit with boosted gas for Garaga ZK verification
-        // Step 1: Get commit transactions from atomiq SDK
         const commitTxs = await (swap as any).txsCommit();
-        console.log("Commit transactions before boosting:", commitTxs);
-
-        // Step 2: Manual L2 gas boost (skip estimation—it's buggy with ZK signers)
-        // Cap at 1.15B to leave headroom under Sepolia's 1.2B limit
-        const BOOSTED_L2_GAS = 1_150_000_000n;  // Conservative: Covers verifier + account + calls
+        const BOOSTED_L2_GAS = 1_150_000_000n;
         for (const tx of commitTxs) {
           const rb = (tx as any).details?.resourceBounds;
           if (rb?.l2_gas) {
             const currentL2 = BigInt(rb.l2_gas.max_amount);
             if (currentL2 < BOOSTED_L2_GAS) {
               rb.l2_gas.max_amount = BOOSTED_L2_GAS;
-              console.log(`Boosted L2 gas to ${BOOSTED_L2_GAS} for tx`);
             }
           }
         }
 
-        // Step 3: Execute each tx with boosted resource bounds
         let commitTxId: string | undefined;
         for (const tx of commitTxs) {
           const result = await account.execute((tx as any).tx, {
             resourceBounds: (tx as any).details?.resourceBounds
           });
           commitTxId = result.transaction_hash;
-          console.log(`Executed tx: ${commitTxId}`);
         }
 
         if (commitTxId) {
@@ -307,10 +286,7 @@ export function BridgeFlow() {
           }
         }
 
-        // Step 4: Wait for SDK to detect the on-chain commit
         await (swap as any).waitTillCommited();
-
-        // Step 5: Wait for counterparty to send the BTC payment
         const swapSuccessful = await (swap as any).waitForPayment();
         if (swapSuccessful) {
           setStep("success");
@@ -318,7 +294,6 @@ export function BridgeFlow() {
           setAutomaticSettlementFailed(true);
         }
       } else {
-        // BTC -> STRK: Use Bitcoin signer
         const success = await (swap as SpvFromBTCSwap<any>).execute(
           {
             address: paymentAddress,
@@ -371,9 +346,7 @@ export function BridgeFlow() {
           }
         );
 
-        if (!success) {
-          setAutomaticSettlementFailed(true);
-        }
+        if (!success) setAutomaticSettlementFailed(true);
       }
     } catch (err: unknown) {
       console.error(err);
@@ -384,8 +357,6 @@ export function BridgeFlow() {
     }
   };
 
-
-  // Manual claim in case automatic settlement fails
   const handleManualClaim = async () => {
     if (!swap || !authCredentials) return;
     setError(null);
@@ -459,10 +430,8 @@ export function BridgeFlow() {
 
   return (
     <div className="flex flex-col lg:flex-row justify-between items-center w-full h-[calc(100vh-6rem)] py-8 px-4">
-      {/* Main Bridge Interface */}
       <div className="w-full max-w-md relative">
         <div className="absolute -inset-1 bg-gradient-to-r from-orange-500/20 to-amber-500/20 rounded-3xl blur-xl opacity-50" />
-
         <div className="relative bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-6 overflow-hidden shadow-2xl">
           <AnimatePresence mode="wait">
             {step === "input" && (
@@ -482,6 +451,7 @@ export function BridgeFlow() {
                 isFetchingQuote={isFetchingQuote}
               />
             )}
+
             {step === "signing" && (
               <motion.div
                 key="signing"
@@ -495,12 +465,14 @@ export function BridgeFlow() {
                   <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-orange-500/10 text-orange-500 mb-2">
                     <Loader2 className="w-6 h-6 animate-spin" />
                   </div>
-                  <h2 className="text-2xl font-bold text-white">Sign Transaction</h2>
-                  <p className="text-white/60 text-sm">Confirm the swap in your wallet</p>
+                  <h2 className="text-2xl font-bold text-white">Signing Transaction</h2>
+                  <p className="text-white/60 text-sm">{isReversed ? "Your Starknet signature is being generated..." : "Confirm the swap in your wallet"}</p>
                 </div>
                 <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 flex items-start gap-3">
                   <Loader2 className="w-5 h-5 text-orange-400 animate-spin flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-orange-200/80">Waiting for Bitcoin signature...</p>
+                  <p className="text-sm text-orange-200/80">
+                    {isReversed ? "Waiting for Starknet signature..." : "Waiting for Bitcoin signature..."}
+                  </p>
                 </div>
               </motion.div>
             )}
@@ -530,7 +502,7 @@ export function BridgeFlow() {
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ type: "spring", damping: 12, stiffness: 100, delay: 0.1 }}
-                    className="w-24 h-24 mx-auto bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(52,211,153,0.4)]"
+                    className="w-24 h-24 mx-auto bg-linear-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(52,211,153,0.4)]"
                   >
                     <Check className="w-12 h-12 text-white" />
                   </motion.div>
@@ -539,7 +511,9 @@ export function BridgeFlow() {
                 <div className="space-y-2">
                   <h2 className="text-3xl font-bold text-white">Bridged!</h2>
                   <p className="text-white/60">
-                    Successfully minted <span className="text-white font-medium">{amount} STRK</span> on Starknet.
+                    {isReversed
+                      ? `Successfully sent ${amount} BTC to Bitcoin network.`
+                      : `Successfully minted ${amount} STRK on Starknet.`}
                   </p>
                 </div>
 
@@ -548,7 +522,15 @@ export function BridgeFlow() {
                     <p className="text-xs text-white/40 uppercase tracking-wider">Transaction ID</p>
                     <p className="text-sm text-white font-mono">{txId.slice(0, 6)}...{txId.slice(-4)}</p>
                   </div>
-                  <a href={`https://mempool.space/testnet4/tx/${txId}`} target="_blank" rel="noreferrer" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors">
+                  <a
+                    href={isReversed
+                      ? `https://sepolia.voyager.online/tx/${txId}`
+                      : `https://mempool.space/testnet4/tx/${txId}`
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                  >
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 </div>
@@ -565,7 +547,6 @@ export function BridgeFlow() {
         </div>
       </div>
 
-      {/* Transaction History Sidebar */}
       <div className="w-full lg:w-100 shrink-0">
         <div className="sticky top-24">
           <SwapHistory
