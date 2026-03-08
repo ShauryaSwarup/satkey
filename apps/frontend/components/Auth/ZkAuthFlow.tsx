@@ -6,6 +6,7 @@ import { sha256 } from "@noble/hashes/sha2";
 import { concatBytes } from "@noble/hashes/utils";
 import { useAuth } from "@/providers/AuthProvider";
 import { formatStarknetAddress } from "@/lib/starknet";
+import { RpcProvider } from "starknet";
 import Wallet, { MessageSigningProtocols, RpcErrorCode } from "sats-connect";
 import {
   Check,
@@ -18,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const PROVER_URL = process.env.NEXT_PUBLIC_PROVER_URL || "http://localhost:3001";
+const STARKNET_RPC_URL = process.env.NEXT_PUBLIC_STARKNET_RPC_URL!;
 const API_BASE = "";
 
 type Step =
@@ -186,22 +188,17 @@ export function ZkAuthFlow({
       }
       const addressToSign = paymentAddressObj.address;
 
-      // Fetch live on-chain nonce for the account (0 if not yet deployed)
-      let nonce = "0";
-      try {
-        const rpcUrl = process.env.NEXT_PUBLIC_STARKNET_RPC_URL || "https://starknet-sepolia.public.blastapi.io";
-        const { RpcProvider } = await import("starknet");
-        const provider = new RpcProvider({ nodeUrl: rpcUrl });
-        const contractNonce = await provider.getNonceForAddress(starknetAddress!);
-        nonce = BigInt(contractNonce).toString();
-      } catch {
-        nonce = "0";
-      }
-
+      const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
+      const nonceResult = await provider.callContract({
+        contractAddress: starknetAddress!,
+        entrypoint: 'get_nonce',
+        calldata: []
+      });
+      const nonceDecimal = nonceResult[0] ? BigInt(nonceResult[0]).toString() : '0';
       const expiry = (Date.now() + 5 * 60 * 1000).toString();
       // Message embeds both nonce and expiry so the BTC signature is bound to this
       // specific nonce — the circuit verifies this binding via message_hash.
-      const message = `Authenticate with Sat Key\n\nNonce: ${nonce}\nExpiry: ${expiry}\n\nSign this message to prove ownership of your wallet and generate a Zero-Knowledge Proof for Starknet.`;
+      const message = `Authenticate with Sat Key\n\nNonce: ${nonceDecimal}\nExpiry: ${expiry}\n\nSign this message to prove ownership of your wallet and generate a Zero-Knowledge Proof for Starknet.`;
 
       const signResponse = await Wallet.request("signMessage", {
         address: addressToSign,
@@ -233,7 +230,7 @@ export function ZkAuthFlow({
           signature_r: r,
           signature_s: s,
           message_hash: messageHash,
-          nonce,
+          nonce: nonceDecimal,
           expiry,
         }),
       });

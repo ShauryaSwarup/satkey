@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/providers/AuthProvider";
 import { formatStarknetAddress } from "@/lib/starknet";
-import { ChevronDown, LogOut, Wallet, Key, Bitcoin, Link2 } from "lucide-react";
+import { ChevronDown, LogOut, Wallet, Key, Bitcoin, Link2, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function Profile() {
@@ -17,6 +17,18 @@ export default function Profile() {
 
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const handleCopy = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(label);
+      setTimeout(() => setCopied(null), 1200);
+    } catch (e) {
+      // fallback or error
+    }
+  };
+
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -88,7 +100,18 @@ export default function Profile() {
                 </div>
                 <div className="flex flex-col pt-0.5">
                   <span className="text-[10px] text-white/40 uppercase tracking-[0.2em] font-semibold mb-1">Bitcoin Wallet</span>
-                  <span className="text-sm text-white/90 font-mono tracking-wider">{truncatedBtc}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-white/90 font-mono tracking-wider">{truncatedBtc}</span>
+                    <button
+                      type="button"
+                      aria-label="Copy Bitcoin address"
+                      onClick={() => handleCopy(btcAddress, 'btc')}
+                      className="p-1 rounded hover:bg-white/10 text-white/60 hover:text-orange-400 transition-colors hover:cursor-pointer"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    {copied === 'btc' && <span className="text-xs text-green-400 ml-1">Copied!</span>}
+                  </div>
                 </div>
               </motion.div>
 
@@ -118,7 +141,20 @@ export default function Profile() {
                 </div>
                 <div className="flex flex-col pt-0.5">
                   <span className="text-[10px] text-orange-400/70 uppercase tracking-[0.2em] font-semibold mb-1">Starknet Identity</span>
-                  <span className="text-sm text-white/90 font-mono tracking-wider">{formattedStarknet}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-white/90 font-mono tracking-wider">{formattedStarknet}</span>
+                    {starknetAddress && (
+                      <button
+                        type="button"
+                        aria-label="Copy Starknet address"
+                        onClick={() => handleCopy(starknetAddress, 'starknet')}
+                        className="p-1 rounded hover:bg-white/10 text-white/60 hover:text-orange-400 transition-colors hover:cursor-pointer"
+                      >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    )}
+                    {copied === 'starknet' && <span className="text-xs text-green-400 ml-1">Copied!</span>}
+                  </div>
                   <p className="text-[11px] text-white/40 mt-2 leading-relaxed font-light">
                     Your Bitcoin key controls Starknet.
                   </p>

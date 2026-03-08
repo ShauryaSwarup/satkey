@@ -49,34 +49,11 @@ export class SatKeySigner implements SignerInterface {
     transactions: Call[],
     transactionsDetail: InvocationsSignerDetails
   ): Promise<Signature> {
-    const nonce = transactionsDetail.nonce ?? 0;
-    // Nonce must be decimal for the message string — the circuit receives it as a Field
-    const nonceDecimal =
-      typeof nonce === "bigint" || typeof nonce === "number"
-        ? nonce.toString()
-        : BigInt(nonce).toString();
 
-    // FIX: Reconstruct the message using the CURRENT nonce, then recompute its hash.
-    // The stored signature_r/s was signed over a message with a specific nonce baked in.
-    // If the on-chain nonce has advanced, the stored sig/hash will no longer match —
-    // the prover will reject it. For a proper multi-tx session, a fresh wallet signature
-    // should be requested here. For now we detect the mismatch and throw early.
     const storedNonce = this.btcProofInputs.nonce ?? "0";
-    const storedNonceDecimal =
-      storedNonce.startsWith("0x")
-        ? BigInt(storedNonce).toString()
-        : storedNonce;
+    const storedNonceDecimal = storedNonce.startsWith("0x") ? BigInt(storedNonce).toString() : storedNonce;
 
-    if (nonceDecimal !== storedNonceDecimal) {
-      throw new Error(
-        `SatKeySigner: on-chain nonce (${nonceDecimal}) does not match the nonce this ` +
-        `session was created for (${storedNonceDecimal}). ` +
-        `A fresh Bitcoin signature is required for each new nonce. ` +
-        `Re-authenticate via ZkAuthFlow to obtain updated credentials.`
-      );
-    }
-
-    return this._callProver(nonceDecimal);
+    return this._callProver(storedNonceDecimal);
   }
 
   public async signRaw(hash: string): Promise<Signature> {

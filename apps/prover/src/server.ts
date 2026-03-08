@@ -56,6 +56,7 @@ app.post("/prove", async (req, res) => {
   const required: (keyof ProveRequest)[] = [
     "pubkey", "signature_r", "signature_s", "message_hash", "nonce", "expiry",
   ];
+  console.log("[prover] /prove request received with body:", body);
   for (const field of required) {
     if (!body[field]) {
       res.status(400).json({ error: `Missing required field: ${field}` });

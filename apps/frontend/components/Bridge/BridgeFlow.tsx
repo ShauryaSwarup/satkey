@@ -227,7 +227,14 @@ export function BridgeFlow() {
           setStep("input");
           return;
         }
-
+        const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
+        // Call get_nonce function on the SatKeyAccount contract directly
+        const nonceResult = await provider.callContract({
+          contractAddress: starknetAddress,
+          entrypoint: 'get_nonce',
+          calldata: []
+        });
+        const nonceDecimal = nonceResult[0] ? BigInt(nonceResult[0]).toString() : '0';
         const signer = new SatKeySigner({
           proverUrl: PROVER_URL,
           btcProofInputs: {
@@ -237,18 +244,19 @@ export function BridgeFlow() {
             message_hash: authCredentials.message_hash,
             expiry: authCredentials.expiry,
             salt: authCredentials.salt,
-          }
+            nonce: nonceDecimal
+          },
         });
 
-        const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
         const account = new Account({
           provider,
           address: starknetAddress,
-          signer
+          signer,
         });
 
         const commitTxs = await (swap as any).txsCommit();
         const BOOSTED_L2_GAS = 1_150_000_000n;
+        
         for (const tx of commitTxs) {
           const rb = (tx as any).details?.resourceBounds;
           if (rb?.l2_gas) {
@@ -262,7 +270,7 @@ export function BridgeFlow() {
         let commitTxId: string | undefined;
         for (const tx of commitTxs) {
           const result = await account.execute((tx as any).tx, {
-            resourceBounds: (tx as any).details?.resourceBounds
+            resourceBounds: (tx as any).details?.resourceBounds,
           });
           commitTxId = result.transaction_hash;
         }
@@ -278,21 +286,30 @@ export function BridgeFlow() {
               input_amount: quoteDetails.input,
               output_amount: quoteDetails.output,
               fee: quoteDetails.fee,
-              starknet_address: paymentAddress,
+              starknet_address: starknetAddress,
               confirmations: 0,
               swap_state: SpvFromBTCSwapState.BROADCASTED,
               quote_expiry: quoteDetails.expiry,
+              swap_type: "STRK_TO_BTC",
             });
           }
         }
 
         await (swap as any).waitTillCommited();
         const swapSuccessful = await (swap as any).waitForPayment();
+        
         if (swapSuccessful) {
           setStep("success");
+          if (btcPubkeyHex && commitTxId) {
+            await supabase.from('active_swaps')
+              .update({ swap_state: SpvFromBTCSwapState.CLAIM_CLAIMED })
+              .eq('btc_pubkey', btcPubkeyHex)
+              .eq('tx_id', commitTxId);
+          }
         } else {
           setAutomaticSettlementFailed(true);
         }
+
       } else {
         const success = await (swap as SpvFromBTCSwap<any>).execute(
           {
@@ -324,6 +341,7 @@ export function BridgeFlow() {
                   confirmations: 0,
                   swap_state: SpvFromBTCSwapState.BROADCASTED,
                   quote_expiry: quoteDetails.expiry,
+                  swap_type: "BTC_TO_STRK"
                 });
               }
             },
@@ -332,7 +350,8 @@ export function BridgeFlow() {
               if (btcPubkeyHex && confirmations !== undefined) {
                 await supabase.from('active_swaps')
                   .update({ confirmations })
-                  .eq('btc_pubkey', btcPubkeyHex);
+                  .eq('btc_pubkey', btcPubkeyHex)
+                  .eq('tx_id', sourceTxId);
               }
             },
             onSwapSettled: async () => {
@@ -340,7 +359,8 @@ export function BridgeFlow() {
               if (btcPubkeyHex) {
                 await supabase.from('active_swaps')
                   .update({ swap_state: SpvFromBTCSwapState.CLAIM_CLAIMED })
-                  .eq('btc_pubkey', btcPubkeyHex);
+                  .eq('btc_pubkey', btcPubkeyHex)
+                  .eq('tx_id', txId);
               }
             }
           }
@@ -363,6 +383,14 @@ export function BridgeFlow() {
     setIsProcessing(true);
 
     try {
+      const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
+      // Call get_nonce function on the SatKeyAccount contract directly
+      const nonceResult = await provider.callContract({
+        contractAddress: starknetAddress,
+        entrypoint: 'get_nonce',
+        calldata: []
+      });
+      const nonceDecimal = nonceResult[0] ? BigInt(nonceResult[0]).toString() : '0';
       const signer = new SatKeySigner({
         proverUrl: PROVER_URL,
         btcProofInputs: {
@@ -372,10 +400,10 @@ export function BridgeFlow() {
           message_hash: authCredentials.message_hash,
           expiry: authCredentials.expiry,
           salt: authCredentials.salt,
+          nonce: nonceDecimal
         }
       });
 
-      const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
       if (!starknetAddress) throw new Error("No Starknet address found");
       const account = new Account({
         provider,
@@ -512,8 +540,8 @@ export function BridgeFlow() {
                   <h2 className="text-3xl font-bold text-white">Bridged!</h2>
                   <p className="text-white/60">
                     {isReversed
-                      ? `Successfully sent ${amount} BTC to Bitcoin network.`
-                      : `Successfully minted ${amount} STRK on Starknet.`}
+                      ?  `Successfully swapped ${amount} STRK to Bitcoin Network.`
+                      : `Successfully sent ${amount} BTC to Starknet Network.`}
                   </p>
                 </div>
 

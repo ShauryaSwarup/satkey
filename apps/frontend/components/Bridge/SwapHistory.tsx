@@ -51,7 +51,7 @@ export function SwapHistory({ swaps, isLoading, onSelectSwap }: SwapHistoryProps
       <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
         {swaps.map((swap) => (
           <motion.button
-            key={swap.btc_pubkey}
+            key={swap.created_at}
             onClick={() => onSelectSwap(swap)}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
