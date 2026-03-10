@@ -11,37 +11,59 @@ import { useState } from "react";
 
 const logos = [
     {
-        src: "https://svgl.app/library/nvidia-wordmark-light.svg",
-        alt: "Nvidia Logo",
-    },
-    {
         src: "https://svgl.app/library/supabase_wordmark_light.svg",
         alt: "Supabase Logo",
-    },
-    {
-        src: "https://svgl.app/library/openai_wordmark_light.svg",
-        alt: "OpenAI Logo",
-    },
-    {
-        src: "https://svgl.app/library/turso-wordmark-light.svg",
-        alt: "Turso Logo",
+        className: "dark:brightness-0 dark:invert"
     },
     {
         src: "https://svgl.app/library/vercel_wordmark.svg",
         alt: "Vercel Logo",
+        className: "dark:brightness-0 dark:invert"
     },
     {
-        src: "https://svgl.app/library/github_wordmark_light.svg",
-        alt: "GitHub Logo",
+      src: "https://moonli.me/wp-content/uploads/2022/03/moonli-logo-black.svg",
+      alt: "Moonli Logo",
+      className: "dark:brightness-0 dark:invert"
     },
     {
-        src: "https://svgl.app/library/claude-ai-wordmark-icon_light.svg",
-        alt: "Claude AI Logo",
+      src: "/unisat.png",
+      alt: "Unisat Logo"
     },
     {
-        src: "https://svgl.app/library/clerk-wordmark-light.svg",
-        alt: "Clerk Logo",
+      src: "https://cdn.prod.website-files.com/624b08d53d7ac60ccfc11d8d/645d01e85e0969992e9e4caa_Full_Logo.webp",
+      alt: "Xverse Logo",
+      className: ""
     },
+    {
+      src: "https://www.starknet.io/wp-content/uploads/2025/09/wbtc-white-logo.png",
+      alt: "WBTC Logo",
+      className: ""
+    },
+    {
+      src: "/starkzap.webp",
+      alt: "Starkzap Logo",
+      className: ""
+    },
+    {
+      src: "/avnu-white.svg",
+      alt: "Avnu Logo",
+      className: ""
+    },
+    {
+      src: "/atomiq.svg",
+      alt: "AtomiqLabs Logo",
+      className: ""
+    },
+    {
+      src: "https://cdn.prod.website-files.com/6800c6be3f80a4179f8b4a5f/68064cd4e1316384a0a93bf8_Group%201597882142.svg",
+      alt: "Bitcoin Logo",
+      className: ""
+    },
+    {
+      src: "https://www.starknet.io/wp-content/themes/Starknet/assets/img/starknet-logo-light.svg",
+      alt: "Starknet Logo",
+      className: ""
+    }
 ];
 
 export default function HomePage() {

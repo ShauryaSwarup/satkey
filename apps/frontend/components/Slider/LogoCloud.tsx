@@ -6,8 +6,7 @@ import { cn } from "@/lib/utils";
 type Logo = {
     src: string;
     alt: string;
-    width?: number;
-    height?: number;
+    className: string;
 };
 
 type LogoCloudProps = React.ComponentProps<"div"> & {
@@ -28,12 +27,10 @@ export function LogoCloud({ className, logos, ...props }: LogoCloudProps) {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                         alt={logo.alt}
-                        className="pointer-events-none h-4 select-none md:h-5 dark:brightness-0 dark:invert"
-                        height={logo.height || "auto"}
+                        className={`pointer-events-none h-4 select-none md:h-5 ${logo.className}`}
                         key={`logo-${logo.alt}`}
                         loading="lazy"
                         src={logo.src}
-                        width={logo.width || "auto"}
                     />
                 ))}
             </InfiniteSlider>
