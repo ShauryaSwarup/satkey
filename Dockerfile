@@ -1,16 +1,33 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH="/root/.local/bin:/root/.nargo/bin:/root/.noir/bin:/root/.bb:/root/barretenberg:$PATH"
 
-# System dependencies
+# System dependencies + Python 3.10
 RUN apt-get update && apt-get install -y \
+    software-properties-common \
     curl \
     git \
-    build-essential \
     ca-certificates \
+    build-essential \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y \
+        python3.10 \
+        python3.10-venv \
+        python3.10-distutils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js + pnpm
+# Install pip for Python 3.10
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
+
+# Install pipx + garaga
+RUN python3.10 -m pip install --no-cache-dir pipx \
+ && python3.10 -m pipx install garaga==1.0.1 --python python3.10
+
+ENV PATH="/root/.local/bin:$PATH"
+
+# Node + pnpm
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get update \
     && apt-get install -y nodejs \
@@ -19,24 +36,18 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 # Install Noir
 RUN curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash
-ENV PATH="/root/.nargo/bin:/root/.noir/bin:$PATH"
 RUN noirup --version 1.0.0-beta.16
 
 # Install Barretenberg
 RUN curl -L https://raw.githubusercontent.com/AztecProtocol/aztec-packages/master/barretenberg/bbup/install | bash
-ENV PATH="/root/.bb:/root/barretenberg:$PATH"
 RUN bbup --version 3.0.0-nightly.20251104
 
 # Workspace
 WORKDIR /satkeyprover
 
-# Copy entire monorepo (needed for workspace structure)
 COPY . .
 
-# Install only prover dependencies and shared-types
-RUN pnpm install --filter @satkey/prover --filter @satkey/shared-types
-
-# Build only prover
+RUN pnpm install --filter @satkey/prover... --frozen-lockfile
 RUN pnpm build --filter @satkey/prover
 
 EXPOSE 3001
