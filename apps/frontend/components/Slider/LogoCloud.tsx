@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 type Logo = {
     src: string;
     alt: string;
-    className: string;
+    className?: string;
 };
 
 type LogoCloudProps = React.ComponentProps<"div"> & {

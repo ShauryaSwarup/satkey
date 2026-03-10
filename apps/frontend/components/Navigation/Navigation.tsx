@@ -18,6 +18,7 @@ const Navigation: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
+  const [isScrolled, setIsScrolled] = useState(false);
 
   // Automatically open auth modal if connected but not authenticated
   useEffect(() => {
@@ -27,6 +28,15 @@ const Navigation: React.FC = () => {
       setIsAuthModalOpen(false);
     }
   }, [isConnected, isAuthenticated]);
+  // Scroll listener for sticky blurred navbar
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 0);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
 
   const navLinks = [
     { name: 'Dashboard', href: '/dashboard' },
@@ -37,7 +47,12 @@ const Navigation: React.FC = () => {
 
   return (
     <>
-      <nav className="fixed top-0 left-0 w-full z-60 flex justify-between items-center p-4 md:p-6 bg-black/20 backdrop-blur-md border-b border-white/5">
+      <nav className={cn(
+        "fixed top-0 left-0 w-full z-60 flex justify-between items-center p-4 md:p-6 transition-all duration-300",
+        isScrolled
+          ? "bg-black/20 backdrop-blur-md border-b border-white/5"
+          : "bg-transparent border-transparent"
+      )}>
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2">
             <Image
