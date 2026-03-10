@@ -1,8 +1,13 @@
-# SatKey — Bitcoin-to-Starknet Identity Protocol
+# SatKey
 
-**One-click Bitcoin → Starknet. No seed phrase. No bridge friction.**
+<p align="center">
+  <img src=".github/logo.png" alt="SatKey Logo" width="200" />
+</p>
 
-SatKey lets your users authenticate on Starknet using only their Bitcoin wallet. They connect, sign once, and get a deterministic Starknet account — ready to trade, stake, and use DeFi on Ethereum's most powerful L2.
+<p align="center">
+  <strong>Bitcoin-to-Starknet Identity Protocol</strong><br/>
+  One-click Bitcoin → Starknet. No seed phrase. No bridge friction.
+</p>
 
 ---
 
@@ -10,102 +15,106 @@ SatKey lets your users authenticate on Starknet using only their Bitcoin wallet.
 
 Bitcoin holders face a painful choice:
 
-| Option | Problem |
-|--------|---------|
-| **Create a new wallet** | Seed phrase management, lost keys, friction |
-| **Use a bridge** | Centralized custodians, long wait times, trust assumptions |
-| **Multi-sig wrappers** | Complexity, higher gas costs, coordination overhead |
+| Option                  | Problem                                                    |
+| ----------------------- | ---------------------------------------------------------- |
+| **Create a new wallet** | Seed phrase management, lost keys, friction                |
+| **Use a bridge**        | Centralized custodians, long wait times, trust assumptions |
+| **Multi-sig wrappers**  | Complexity, higher gas costs, coordination overhead        |
 
-**SatKey solves this**: Prove Bitcoin ownership without exposing the private key. Your users' Bitcoin wallet *becomes* their Starknet identity.
+**SatKey solves this**: Prove Bitcoin ownership without exposing the private key. Your users' Bitcoin wallet _becomes_ their Starknet identity.
 
 ---
 
 ## Why SatKey?
 
+### 🎯 The Moat / Unique Selling Proposition
+
+- **Zero-Knowledge Proofs**: Uses ZK to prove Bitcoin ownership without revealing the private key — a cryptographically provable solution, not a trust-based bridge
+- **Deterministic Addresses**: Same Bitcoin key → same Starknet address. Every time. No randomness, no surprises
+- **Custody-Free**: No middlemen. No bridges to hack. Users own their assets
+- **Battle-Tested Stack**: Noir + Barretenberg for ZK, Garaga for on-chain verification, Starknet for execution
+
 ### For Users
 
 - **Zero New Secrets**: Use your existing Bitcoin wallet — no seed phrase to lose
 - **Instant Account**: Starknet account deploys automatically on first use
-- **Deterministic Address**: Same Bitcoin key → same Starknet address. Every time.
 - **Native Security**: Your Bitcoin key never leaves your wallet or gets exposed
 
 ### For Developers
 
-- **Simple Integration**: Standard REST API. No ZK expertise required.
-- **Gas Sponsorship**: Optional AVNU Paymaster integration for gasfree or gasless transactions
-- **Battle-Tested Primitives**: Noir + Barretenberg for ZK, Starknet for execution, Garaga for on-chain verification
-- **Deterministic Deployment**: Predictable account addresses — plan your UX around known addresses
+- **Simple Integration**: Standard REST API. No ZK expertise required
+- **Gas Sponsorship**: Optional AVNU Paymaster for gasless transactions
+- **Predictable Addresses**: Plan your UX around known addresses
 
 ### For Products
 
 - **Bitcoin First**: Tap into the largest crypto user base without forcing wallet migration
 - **Unified Identity**: One key across chains — BTC for ownership, Starknet for execution
-- **Custody-Free**: No middlemen. No bridges to hack. Your users own their assets.
 
 ---
 
 ## How It Works
+
+### User Journey
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           USER JOURNEY                                      │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-  1. CONNECT        2. SIGN           3. PROVE           4. DEPLOY      5. TRANSACT
-     Bitcoin           Auth              ZK                 Starknet        Starknet
-     Wallet           Message           Proof              Account         Normally
-
   ┌──────────┐    ┌──────────┐     ┌──────────┐      ┌──────────┐    ┌──────────┐
-  │ Xverse / │───▶│ Sign    │────▶│ Generate │─────▶│ Deploy   │───▶│ Use      │
-  │ Leather  │    │ message │     │ proof    │      │ account  │    │ Starknet │
+  │ CONNECT  │───▶│   SIGN   │────▶│  PROVE   │─────▶│  DEPLOY  │───▶│TRANSACT  │
+  │ Bitcoin  │    │  Auth    │    │    ZK    │      │ Starknet │    │ Starknet │
+  │ Wallet   │    │ Message  │    │  Proof   │      │ Account  │    │   App    │
   └──────────┘    └──────────┘     └──────────┘      └──────────┘    └──────────┘
-       │                                    │                 │                
-       │                                    ▼                 │                
-       │                             ┌──────────────┐          │                
-       │                             │   Prover     │          │                
-       │                             │   Service    │          │                
-       │                             │ (Noir + bb)  │          │                
-       │                             └──────────────┘          │                
-       │                                                      │                
-       └──────────────────────────────────────────────────────┘                
-                                    Relayer                                      
+       │                                    │                 │
+       │                                    ▼                 │
+       │                             ┌──────────────┐          │
+       │                             │    Prover    │          │
+       │                             │  (Noir + bb) │          │
+       │                             └──────────────┘          │
+       │                                                      │
+       └──────────────────────────────────────────────────────┘
+                                    │
+                              Relayer (deploys)
+
+  ══════════════════════════════════════════════════════════════════════════════
+                           STAKING FLOW (IMPLEMENTED ✅)
+  ══════════════════════════════════════════════════════════════════════════════
+
+       │                                                                   │
+       │  ┌──────────┐    ┌──────────┐     ┌──────────┐      ┌──────────┐ │
+       │  │   STAKE  │───▶│  SIGN    │────▶│  PROVE   │─────▶│ EXECUTE  │─┘
+       │  │   STRK   │    │  Stake   │    │    ZK    │      │ Stake TX │
+       │  │          │    │ Request  │    │  Proof   │      │ via AVNU │
+       │  └──────────┘    └──────────┘     └──────────┘      └──────────┘ │
+       │       │                                    │                 │
+       │       │                                    ▼                 │
+       │       │                             ┌──────────────┐          │
+       │       │                             │    Prover    │          │
+       │       │                             │  (Noir + bb) │          │
+       │       │                             └──────────────┘          │
+       │       │                                                      │
+       └───────┴──────────────────────────────────────────────────────┘
+                           Relayer (executes via AVNU)
 ```
 
 ### Step-by-Step
 
 1. **Connect Bitcoin Wallet**: User connects via Xverse or Leather (sats-connect)
-2. **Sign Authentication Message**: User signs a message with nonce + expiry
+2. **Sign Authentication Message**: User signs a message with nonce + expiry (BIP-322 styled)
 3. **Generate ZK Proof**: Server generates proof verifying the ECDSA signature — **without seeing the private key**
 4. **Deploy Account**: Relayer deploys a deterministic Starknet account bound to the Bitcoin public key
 5. **Use Starknet**: User signs Starknet transactions with their Bitcoin wallet
+6. **Stake STRK**: User can stake STRK directly from their SatKey account using AVNU integration
 
 ---
 
-## Use Cases
-
-### DeFi Protocols
-- Accept BTC as collateral without wrapping
-- Let Bitcoin holders access leverage, lending, and trading
-
-### NFT Marketplaces
-- Bitcoin-native collectibles meet Starknet liquidity
-- One wallet for both chains
-
-### Gaming
-- Play-to-earn with Bitcoin as the identity layer
-- No onboarding friction
-
-### Identity & Reputation
-- Bitcoin as a sybil-resistant identity primitive
-- On-chain reputation attached to BTC holdings
-
----
-
-## Technical Overview
+## System Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                            SATKEY ARCHITECTURE                              │
+│                            SATKEY ARCHITECTURE                               │
 └──────────────────────────────────────────────────────────────────────────────┘
 
   Bitcoin          Frontend           Prover             Relayer           Starknet
@@ -139,27 +148,63 @@ Bitcoin holders face a painful choice:
      │                │                  │                  │                │
      │                │                  │        ┌──────────┴──────────┐    │
      │                │                  │        │  1. Derive salt    │    │
-     │                │                  │        │  2. Deploy via    │    │
+     │                │                  │        │  2. Deploy via     │    │
      │                │                  │        │     UDC            │    │
      │                │                  │        └──────────┬──────────┘    │
      │                │                  │                   │               │
      │                │                  │◀──────────────────│               │
-     │                │                  │    (account addr) │               │
+     │                │                  │    (account addr)  │               │
      │                │                  │                   │               │
      │◀───────────────│◀─────────────────│◀──────────────────│               │
      │ (success)      │ (account addr)   │                   │               │
 ```
 
+---
+
+## Use Cases
+
+### DeFi Protocols
+
+- Accept BTC as collateral without wrapping
+- Let Bitcoin holders access leverage, lending, and trading
+
+### NFT Marketplaces
+
+- Bitcoin-native collectibles meet Starknet liquidity
+- One wallet for both chains
+
+### Gaming
+
+- Play-to-earn with Bitcoin as the identity layer
+- No onboarding friction
+
+### Identity & Reputation
+
+- Bitcoin as a sybil-resistant identity primitive
+- On-chain reputation attached to BTC holdings
+
+### Staking (Implemented ✅)
+
+- Stake STRK directly from your SatKey account
+- Uses AVNU/StarkZap for permissionless staking
+- ZK proof-based authentication for all stake transactions
+- No need to bridge assets — stake directly from your SatKey account
+
+---
+
+## Technical Overview
+
 ### System Components
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| **Frontend** | Next.js + sats-connect | Wallet connection, message signing, flow orchestration |
-KT|| **Prover** | Node.js + Noir + Barretenberg | Generates ZK proofs from Bitcoin signatures |
-RK|| **ZK Circuit** | Noir (1.0.0-beta.16) | Proves ECDSA validity + derives Starknet salt |
-WQ|| **Verifier** | Cairo + Garaga (1.0.1) | On-chain proof verification |
-| **Relayer** | Node.js + Starknet.js | Account deployment + transaction execution |
-| **Account** | Cairo (SatKeyAccount) | Custom Starknet account using ZK for auth |
+| Component      | Technology                    | Purpose                                                |
+| -------------- | ----------------------------- | ------------------------------------------------------ |
+| **Frontend**   | Next.js + sats-connect        | Wallet connection, message signing, flow orchestration |
+| **Prover**     | Node.js + Noir + Barretenberg | Generates ZK proofs from Bitcoin signatures            |
+| **ZK Circuit** | Noir (1.0.0-beta.16)          | Proves ECDSA validity + derives Starknet salt          |
+| **Verifier**   | Cairo + Garaga (1.0.1)        | On-chain proof verification                            |
+| **Relayer**    | Node.js + Starknet.js         | Account deployment + transaction execution             |
+| **Account**    | Cairo (SatKeyAccount)         | Custom Starknet account using ZK for auth              |
+| **Staking**    | AVNU/StarkZap Integration     | STRK staking via permissionless pools                  |
 
 ---
 
@@ -170,11 +215,13 @@ WQ|| **Verifier** | Cairo + Garaga (1.0.1) | On-chain proof verification |
 The frontend handles wallet connection and message signing.
 
 **Wallet Integration**:
+
 - Uses `sats-connect` for Xverse/Leather compatibility
 - Extracts payment address (BIP-44, not ordinals/Taproot)
 - Signs BIP-322 styled auth message
 
 **Auth Flow** (`ZkAuthFlow.tsx`):
+
 ```typescript
 // 1. Connect wallet
 const { address, publicKey } = await connect();
@@ -198,6 +245,7 @@ const { proof, publicSignals } = await fetch(`${PROVER_URL}/prove`, {
 ```
 
 **Key Files**:
+
 - `apps/frontend/components/Auth/ZkAuthFlow.tsx`
 - `apps/frontend/providers/AuthProvider.tsx`
 - `packages/crypto/src/index.ts` — Bitcoin message hashing utilities
@@ -209,6 +257,7 @@ const { proof, publicSignals } = await fetch(`${PROVER_URL}/prove`, {
 The prover generates ZK proofs. It's a thin API layer over the Noir circuit + Barretenberg.
 
 **Technology Stack**:
+
 - Node.js + Express
 - Noir 1.0.0-beta.16 (circuit compilation)
 - Barretenberg 3.0.0-nightly.20251104 (proof generation)
@@ -220,6 +269,7 @@ The prover generates ZK proofs. It's a thin API layer over the Noir circuit + Ba
 Generates a ZK proof verifying a valid ECDSA signature.
 
 **Request**:
+
 ```typescript
 {
   pubkey: "02/03..." | "04...",     // Compressed/uncompressed hex
@@ -232,6 +282,7 @@ Generates a ZK proof verifying a valid ECDSA signature.
 ```
 
 **Response**:
+
 ```typescript
 {
   proof: "0x...",              // ZK proof bytes (hex)
@@ -245,6 +296,7 @@ Generates a ZK proof verifying a valid ECDSA signature.
 ```
 
 **How It Works**:
+
 1. Receive signature components from frontend
 2. Format inputs as Prover.toml
 3. Run `nargo execute` to generate witness
@@ -252,11 +304,13 @@ Generates a ZK proof verifying a valid ECDSA signature.
 5. Parse and return proof + public signals
 
 **Key Files**:
+
 - `apps/prover/src/server.ts` — Express API
 - `apps/prover/src/proof.ts` — Barretenberg integration
 - `apps/prover/src/witness.ts` — Circuit input preparation
 
-VN|**Build Workflow** (in `circuits/satkey_auth`):
+#### Build Workflow (in `circuits/satkey_auth`):
+
 ```bash
 # 1. Compile the Noir circuit
 nargo build
@@ -290,7 +344,7 @@ scarb build
 
 ### ZK Circuit
 
-The circuit proves: *"I know a Bitcoin private key that signed this message."*
+The circuit proves: _"I know a Bitcoin private key that signed this message."_
 
 **What It Proves**:
 
@@ -307,13 +361,13 @@ fn main(
     pubkey_y: [u8; 32],
     sig_r: [u8; 32],
     sig_s: [u8; 32],
-    
+
     // Public inputs
     message_hash: pub [u8; 32],
     nonce: pub Field,
     expiry: pub Field,
 ) -> pub [Field; 4] {
-    
+
     // 1. Verify ECDSA secp256k1 signature
     let mut signature: [u8; 64] = [0; 64];
     // ... assemble r || s
@@ -332,13 +386,13 @@ fn main(
 
 **Private vs Public**:
 
-| Input | Visibility | Purpose |
-|-------|------------|---------|
-| `pubkey_x`, `pubkey_y` | **Private** | Bitcoin public key coordinates |
-| `sig_r`, `sig_s` | **Private** | ECDSA signature components |
-| `message_hash` | Public | Hash of signed message |
-| `nonce`, `expiry` | Public | Timestamps |
-| `salt` | **Public output** | Deterministic account address |
+| Input                  | Visibility        | Purpose                        |
+| ---------------------- | ----------------- | ------------------------------ |
+| `pubkey_x`, `pubkey_y` | **Private**       | Bitcoin public key coordinates |
+| `sig_r`, `sig_s`       | **Private**       | ECDSA signature components     |
+| `message_hash`         | Public            | Hash of signed message         |
+| `nonce`, `expiry`      | Public            | Timestamps                     |
+| `salt`                 | **Public output** | Deterministic account address  |
 
 **Why UltraKeccakHonk?**
 
@@ -348,6 +402,7 @@ fn main(
 - Battle-tested in Aztec Protocol
 
 **Key Files**:
+
 - `circuits/satkey_auth/src/main.nr` — Circuit source
 - `circuits/satkey_auth/Nargo.toml` — Circuit config
 - `circuits/satkey_auth/target/` — Compiled artifacts
@@ -359,6 +414,7 @@ fn main(
 The relayer handles Starknet account deployment and transaction execution.
 
 **Responsibilities**:
+
 1. **Account Deployment**: Derive salt from Bitcoin pubkey, deploy via UDC
 2. **Transaction Execution**: Execute user calls with the ZK proof as signature
 3. **Fee Management**: Handle STRK payments or integrate AVNU Paymaster
@@ -366,6 +422,7 @@ The relayer handles Starknet account deployment and transaction execution.
 #### POST /deploy-account
 
 **Request**:
+
 ```typescript
 {
   proof: "0x...",
@@ -375,6 +432,7 @@ The relayer handles Starknet account deployment and transaction execution.
 ```
 
 **Response**:
+
 ```typescript
 {
   account_address: "0x...",
@@ -385,6 +443,7 @@ The relayer handles Starknet account deployment and transaction execution.
 #### POST /execute
 
 **Request**:
+
 ```typescript
 {
   to: "0x...",
@@ -396,6 +455,7 @@ The relayer handles Starknet account deployment and transaction execution.
 ```
 
 **Key Files**:
+
 - `apps/relayer/src/server.ts` — API server
 - `apps/relayer/src/deploy.ts` — Account deployment logic
 - `apps/relayer/src/relay.ts` — Transaction execution
@@ -409,6 +469,7 @@ The relayer handles Starknet account deployment and transaction execution.
 A custom Starknet account that uses ZK proofs for authentication.
 
 **Signature Layout**:
+
 ```
 [proof_len, proof_felt_0, ..., proof_felt_n, salt, msg_hash, nonce, expiry]
 ```
@@ -418,33 +479,34 @@ A custom Starknet account that uses ZK proofs for authentication.
 ```cairo
 fn __validate__(ref self: ContractState, calls: Array<Call>) -> felt252 {
     let signature = get_tx_info().signature;
-    
+
     // 1. Parse proof + public signals
     let proof_len = signature[0];
     let salt = signature[1 + proof_len];
     let nonce = signature[1 + proof_len + 2];
     let expiry = signature[1 + proof_len + 3];
-    
+
     // 2. Replay protection: nonce must match
     assert(self.nonce.read() == nonce, 'Nonce mismatch');
-    
+
     // 3. Freshness: expiry must be in future
     assert(expiry > get_block_timestamp(), 'Proof expired');
-    
+
     // 4. Salt must match this account
     assert(self.public_key_salt.read() == salt, 'Salt mismatch');
-    
+
     // 5. Verify ZK proof on-chain
     let verifier = IGaragaVerifierDispatcher {
         contract_address: self.verifier_class_hash.read()
     };
     verifier.verify_ultra_keccak_zk_honk_proof(signature);
-    
+
     starknet::VALIDATED
 }
 ```
 
 **Features**:
+
 - SNIP-6 compliant
 - Nonce-based replay protection
 - Expiry-based freshness
@@ -457,6 +519,7 @@ fn __validate__(ref self: ContractState, calls: Array<Call>) -> felt252 {
 Generated by **Garaga** from the Noir circuit. Verifies UltraKeccakHonk proofs on-chain.
 
 **Interface**:
+
 ```cairo
 fn verify_ultra_keccak_zk_honk_proof(
     full_proof_with_hints: Span<felt252>,
@@ -464,6 +527,7 @@ fn verify_ultra_keccak_zk_honk_proof(
 ```
 
 **Deployment**:
+
 ```bash
 cd circuits/satkey_auth/satkey_verifier
 scarb build
@@ -472,6 +536,7 @@ garaga deploy --class-hash 0x... --network sepolia
 ```
 
 **Key Files**:
+
 - `satkey_verifier/src/honk_verifier.cairo` — Generated verifier
 - `chain/src/satkey_account.cairo` — Account contract
 
@@ -493,12 +558,12 @@ garaga deploy --class-hash 0x... --network sepolia
 
 ### Threat Model
 
-| Threat | Mitigation |
-|--------|------------|
-| Private key theft | Never transmitted; only signature proof |
-| Proof replay | Nonce increments on each use |
-| Stale proofs | Expiry timestamp enforced on-chain |
-| Front-running | Per-account salt prevents address hijacking |
+| Threat            | Mitigation                                  |
+| ----------------- | ------------------------------------------- |
+| Private key theft | Never transmitted; only signature proof     |
+| Proof replay      | Nonce increments on each use                |
+| Stale proofs      | Expiry timestamp enforced on-chain          |
+| Front-running     | Per-account salt prevents address hijacking |
 
 ---
 
@@ -506,13 +571,13 @@ garaga deploy --class-hash 0x... --network sepolia
 
 ### Prerequisites
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Noir | 1.0.0-beta.16 | ZK circuit |
-| Barretenberg | 3.0.0-nightly.20251104 | Proof generation |
-| Garaga | 1.0.1 | Verifier generation |
-| Scarb | 2.14.0 | Cairo compilation |
-| Starkli | latest | Starknet CLI |
+| Tool         | Version                | Purpose             |
+| ------------ | ---------------------- | ------------------- |
+| Noir         | 1.0.0-beta.16          | ZK circuit          |
+| Barretenberg | 3.0.0-nightly.20251104 | Proof generation    |
+| Garaga       | 1.0.1                  | Verifier generation |
+| Scarb        | 2.14.0                 | Cairo compilation   |
+| Starkli      | latest                 | Starknet CLI        |
 
 ### Contract Compilation
 
@@ -529,25 +594,28 @@ scarb build
 ### Starknet Sepolia
 
 1. **Declare Verifier**:
-   ```bash
-   garaga declare --network sepolia
-   ```
+
+    ```bash
+    garaga declare --network sepolia
+    ```
 
 2. **Deploy Verifier**:
-   ```bash
-   garaga deploy --class-hash 0x... --network sepolia
-   ```
+
+    ```bash
+    garaga deploy --class-hash 0x... --network sepolia
+    ```
 
 3. **Declare Account**:
-   ```bash
-   sncast --account YOUR_ACCOUNT declare --contract-name SatKeyAccount
-   ```
+
+    ```bash
+    sncast --account YOUR_ACCOUNT declare --contract-name SatKeyAccount
+    ```
 
 4. **Configure Relayer**: Set environment variables:
-   - `VERIFIER_CLASS_HASH`
-   - `SATKEY_CLASS_HASH`
-   - `RELAYER_PRIVATE_KEY`
-   - `STARKNET_RPC_URL`
+    - `VERIFIER_CLASS_HASH`
+    - `SATKEY_CLASS_HASH`
+    - `RELAYER_PRIVATE_KEY`
+    - `STARKNET_RPC_URL`
 
 See `docs/SEPOLIA_DEPLOYMENT.md` for detailed instructions.
 
@@ -555,16 +623,16 @@ See `docs/SEPOLIA_DEPLOYMENT.md` for detailed instructions.
 
 ## Environment Variables
 
-| Variable | Description | Required For |
-|----------|-------------|--------------|
-| `NEXT_PUBLIC_PROVER_URL` | Prover service URL | Frontend |
-| `NEXT_PUBLIC_RELAYER_URL` | Relayer service URL | Frontend |
-| `STARKNET_RPC_URL` | Starknet RPC endpoint | Relayer |
-| `RELAYER_PRIVATE_KEY` | Deployer private key | Relayer |
-| `SATKEY_CLASS_HASH` | Account class hash | Relayer |
-| `VERIFIER_CLASS_HASH` | Verifier contract address | Relayer |
-| `NARGO_BIN` | Path to nargo binary | Prover |
-| `BB_BIN` | Path to bb binary | Prover |
+| Variable                  | Description               | Required For |
+| ------------------------- | ------------------------- | ------------ |
+| `NEXT_PUBLIC_PROVER_URL`  | Prover service URL        | Frontend     |
+| `NEXT_PUBLIC_RELAYER_URL` | Relayer service URL       | Frontend     |
+| `STARKNET_RPC_URL`        | Starknet RPC endpoint     | Relayer      |
+| `RELAYER_PRIVATE_KEY`     | Deployer private key      | Relayer      |
+| `SATKEY_CLASS_HASH`       | Account class hash        | Relayer      |
+| `VERIFIER_CLASS_HASH`     | Verifier contract address | Relayer      |
+| `NARGO_BIN`               | Path to nargo binary      | Prover       |
+| `BB_BIN`                  | Path to bb binary         | Prover       |
 
 ---
 
@@ -573,6 +641,7 @@ See `docs/SEPOLIA_DEPLOYMENT.md` for detailed instructions.
 Starknet fees are paid in STRK.
 
 You sponsor all transaction fees. User pays nothing.
+
 ---
 
 ## Development
