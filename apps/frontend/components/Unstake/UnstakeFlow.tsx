@@ -6,7 +6,7 @@ import { ArrowDownToLine, CheckCircle2, Loader2, ShieldCheck, Wallet } from "luc
 import { cn } from "@/lib/utils";
 import { sepoliaValidators } from "starkzap";
 import { sdk } from "@/lib/starkzap";
-import { Account, CallData, RpcProvider, uint256 } from "starknet";
+import { Account, CallData, RpcProvider } from "starknet";
 import { SatKeySigner } from "@/models/SatKeySigner";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -19,7 +19,7 @@ async function resolveStrkPool() {
   const pools = await sdk.getStakerPools(firstValidator.stakerAddress);
   const strkPool = pools.find((p) => p.token.symbol === "STRK");
   if (!strkPool) throw new Error("No STRK pool found");
-  return strkPool;
+  return {strkPool, firstValidator};
 }
 
 type UnstakeStep = "input" | "signing" | "relaying" | "success" | "error";
@@ -27,6 +27,8 @@ type UnstakeStep = "input" | "signing" | "relaying" | "success" | "error";
 export function UnstakeFlow() {
   const { starknetAddress: accountAddress, authCredentials } = useAuth();
   const [step, setStep] = useState<UnstakeStep>("input");
+  const [validator, setValidator] = useState<any | null>(null);
+  const [pool, setPool] = useState<any | null>(null);
   const [amount, setAmount] = useState("");
   const [isHovered, setIsHovered] = useState(false);
   const [stakedBalance, setStakedBalance] = useState<string>("0");
@@ -37,7 +39,9 @@ export function UnstakeFlow() {
     if (!accountAddress) return;
     (async () => {
       try {
-        const pool = await resolveStrkPool();
+        const {strkPool: pool, firstValidator}= await resolveStrkPool();
+        setPool(pool);
+        setValidator(firstValidator);
         const result = await new RpcProvider({ nodeUrl: STARKNET_RPC_URL }).callContract({
           contractAddress: pool.poolContract,
           entrypoint: "get_pool_member_info_v1",
@@ -101,7 +105,7 @@ export function UnstakeFlow() {
 
       const provider = new RpcProvider({ nodeUrl: STARKNET_RPC_URL });
       const account = await buildAccount(provider);
-      const pool = await resolveStrkPool();
+      const {strkPool: pool}= await resolveStrkPool();
 
       const decimals = pool.token.decimals ?? 18;
       const amountU128 = BigInt(Math.round(parseFloat(amount) * 10 ** decimals));
@@ -169,7 +173,41 @@ export function UnstakeFlow() {
                       {stakedBalance} STRK
                     </span>
                   </div>
+                  {validator && pool && (
+                    <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-4">
+                      <img
+                        src={validator.logoUrl}
+                        alt={validator.name}
+                        width={40}
+                        height={40}
+                        className="rounded-lg"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-white font-medium text-sm">
+                          {validator.name}
+                        </span>
 
+                        <span className="text-white/50 text-xs">
+                          Validator Pool
+                        </span>
+
+                        <span className="text-orange-400 text-xs font-mono">
+                          {pool.poolContract.slice(0, 8)}...
+                          {pool.poolContract.slice(-6)}
+                        </span>
+                      </div>
+
+                      <div className="ml-auto text-right">
+                        <div className="text-white text-sm font-medium">
+                          {pool.token.symbol}
+                        </div>
+
+                        <div className="text-xs text-white/40">
+                          Delegation Pool
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="relative group">
                     <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                     <input

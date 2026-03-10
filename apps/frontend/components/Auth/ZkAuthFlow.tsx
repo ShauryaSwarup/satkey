@@ -42,6 +42,7 @@ declare global {
       signMessage: (message: string, type: "ecdsa" | "bip322-simple") => Promise<string>;
       getPublicKey: () => Promise<string>;
       getAccounts: () => Promise<string[]>;
+      getNetwork: () => Promise<string>;
     };
   }
 }
@@ -59,6 +60,7 @@ export function ZkAuthFlow({
     setIsAuthenticated,
     setZkProof,
     setStarknetAddress,
+    setNetwork,
     starknetAddress,
     isAuthenticated,
     btcPubkeyHex,
@@ -203,6 +205,12 @@ export function ZkAuthFlow({
         addressToSign = accounts[0];
         pubkeyHex = await window.unisat!.getPublicKey();
 
+        const networkResponse = await window.unisat!.getNetwork();
+        setNetwork({
+          bitcoin: {name: networkResponse},
+          stacks: {name: networkResponse},
+        });
+
         // Fetch nonce
         let nonceDecimal = "0";
         try {
@@ -278,6 +286,15 @@ export function ZkAuthFlow({
           return;
         }
         addressToSign = paymentAddressObj.address;
+
+        const networkResponse = await Wallet.request('wallet_getNetwork', null);
+        if (networkResponse.status === 'success') {
+          const networkData = networkResponse.result as any;
+          setNetwork({
+            bitcoin: { name: networkData.bitcoin?.name || networkData.bitcoin || 'mainnet' },
+            stacks: { name: networkData.stacks?.name || networkData.stacks || 'mainnet' },
+          });
+        }
 
         let nonceDecimal = "0";
         try {
@@ -378,6 +395,28 @@ export function ZkAuthFlow({
       setStep("error");
     }
   };
+
+  const resetFlow = () => {
+    setStep("idle");
+    setErrorMsg("");
+  };
+
+  if (!isConnected) {
+    return (
+      <div
+        className={cn(
+          "flex flex-col items-center justify-center p-8 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl shadow-2xl",
+          className,
+        )}
+      >
+        <ShieldCheck className="w-16 h-16 text-white/20 mb-4" />
+        <h3 className="text-xl font-semibold text-white mb-2">Authentication Required</h3>
+        <p className="text-sm text-white/60 text-center">
+          Please connect your wallet to authenticate.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div

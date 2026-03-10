@@ -11,6 +11,14 @@ body {
     font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
 }
 
+/* Cursor pointer for all buttons and interactive elements */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
 @theme {
   --animate-arrow-nudge: arrow-nudge 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   --animate-button-pulse: button-pulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;

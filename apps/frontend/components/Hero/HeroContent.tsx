@@ -25,7 +25,7 @@ const HeroContent: React.FC = () => {
                 <div className='relative flex flex-col items-center lg:items-start text-center lg:text-left space-y-6 md:space-y-8 animate-fade-in order-2 lg:order-1'>
                     <div className='inline-block'>
                         <span className='py-1 px-3 border border-white/20 rounded-full text-xs font-bold text-white/60 tracking-widest uppercase bg-white/5 backdrop-blur-sm'>
-                            Bitcoin-Native Identity
+                            <span className="text-green-500/80">ZK-Powered</span> Bitcoin-Native Identity
                         </span>
                     </div>
 
