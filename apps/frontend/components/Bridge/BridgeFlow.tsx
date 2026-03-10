@@ -7,6 +7,7 @@ import Wallet, { AddressPurpose } from "sats-connect";
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Check, ExternalLink } from "lucide-react";
+import Image from "next/image";
 import { SatKeySigner } from "@/models/SatKeySigner";
 import { Account, RpcProvider } from "starknet";
 import { createClient } from "@/lib/supabase/client";
@@ -478,7 +479,7 @@ export function BridgeFlow() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row justify-between items-center w-full h-[calc(100vh-6rem)] py-8 px-4 gap-4">
+    <div className="flex flex-col items-center w-full h-[calc(100vh-6rem)] py-8 px-4 gap-6">
       {view === "active" && (
         <button
           onClick={resetFlow}
@@ -487,59 +488,72 @@ export function BridgeFlow() {
           ← Back to Bridge
         </button>
       )}
-      <div className="w-full max-w-md relative">
-        <div className="absolute -inset-1 bg-gradient-to-r from-orange-500/20 to-amber-500/20 rounded-3xl blur-xl opacity-50" />
-        <div className="relative bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-6 overflow-hidden shadow-2xl">
-          <AnimatePresence mode="wait">
-            {step === "input" && (
-              <BridgeInput
-                amount={amount}
-                setAmount={setAmount}
-                onContinue={handleContinue}
-                isProcessing={isProcessing}
-                error={error}
-                starknetAddress={starknetAddress}
-                balance={isReversed ? strkBalance : btcBalance}
-                isLoadingBalance={isLoadingBalance}
-                isReversed={isReversed}
-                setIsReversed={setIsReversed}
-                outputAmount={outputAmount}
-                setOutputAmount={setOutputAmount}
-                isFetchingQuote={isFetchingQuote}
-              />
-            )}
 
-            {step === "signing" && (
-              <motion.div
-                key="signing"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-6"
-              >
-                <div className="text-center space-y-2">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-orange-500/10 text-orange-500 mb-2">
-                    <Loader2 className="w-6 h-6 animate-spin" />
+      {/* Main content - Bridge Input and Transaction History side by side */}
+      <div className="flex flex-col lg:flex-row justify-between items-start gap-6 w-full mt-20">
+        <div className="w-full max-w-md relative">
+          <div className="absolute -inset-1 bg-gradient-to-r from-orange-500/20 to-amber-500/20 rounded-3xl blur-xl opacity-50" />
+          <div className="relative bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-6 overflow-hidden shadow-2xl">
+            <AnimatePresence mode="wait">
+              {step === "input" && (
+                <BridgeInput
+                  amount={amount}
+                  setAmount={setAmount}
+                  onContinue={handleContinue}
+                  isProcessing={isProcessing}
+                  error={error}
+                  starknetAddress={starknetAddress}
+                  balance={isReversed ? strkBalance : btcBalance}
+                  isLoadingBalance={isLoadingBalance}
+                  isReversed={isReversed}
+                  setIsReversed={setIsReversed}
+                  outputAmount={outputAmount}
+                  setOutputAmount={setOutputAmount}
+                  isFetchingQuote={isFetchingQuote}
+                />
+              )}
+
+              {step === "signing" && (
+                <motion.div
+                  key="signing"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-6"
+                >
+                  <div className="text-center space-y-2">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-orange-500/10 text-orange-500 mb-2">
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-white">Signing Transaction</h2>
+                    <p className="text-white/60 text-sm">{isReversed ? "Your Starknet signature is being generated..." : "Confirm the swap in your wallet"}</p>
                   </div>
-                  <h2 className="text-2xl font-bold text-white">Signing Transaction</h2>
-                  <p className="text-white/60 text-sm">{isReversed ? "Your Starknet signature is being generated..." : "Confirm the swap in your wallet"}</p>
-                </div>
-                <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 flex items-start gap-3">
-                  <Loader2 className="w-5 h-5 text-orange-400 animate-spin flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-orange-200/80">
-                    {isReversed ? "Waiting for Starknet signature..." : "Waiting for Bitcoin signature..."}
-                  </p>
-                </div>
-              </motion.div>
-            )}
+                  <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 flex items-start gap-3">
+                    <Loader2 className="w-5 h-5 text-orange-400 animate-spin flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-orange-200/80">
+                      {isReversed ? "Waiting for Starknet signature..." : "Waiting for Bitcoin signature..."}
+                    </p>
+                  </div>
+                </motion.div>
+              )}
 
-            {step === "confirming" && (
-              view === "active" ? (
-                selectedSwap ? (
-                  <SwapDetails swap={selectedSwap} />
+              {step === "confirming" && (
+                view === "active" ? (
+                  selectedSwap ? (
+                    <SwapDetails swap={selectedSwap} />
+                  ) : (
+                    <SwapProgress
+                      confirmations={confirmations}
+                      swapState={swapState}
+                      txId={txId}
+                      automaticSettlementFailed={automaticSettlementFailed}
+                      isProcessing={isProcessing}
+                      isReversed={isReversed}
+                      onManualClaim={handleManualClaim}
+                    />
+                  )
                 ) : (
-                  // Fallback to progress if for some reason selectedSwap is null
                   <SwapProgress
                     confirmations={confirmations}
                     swapState={swapState}
@@ -550,84 +564,87 @@ export function BridgeFlow() {
                     onManualClaim={handleManualClaim}
                   />
                 )
-              ) : (
-                <SwapProgress
-                  confirmations={confirmations}
-                  swapState={swapState}
-                  txId={txId}
-                  automaticSettlementFailed={automaticSettlementFailed}
-                  isProcessing={isProcessing}
-                  isReversed={isReversed}
-                  onManualClaim={handleManualClaim}
-                />
-              )
-            )}
+              )}
 
-            {step === "success" && (
-              <motion.div
-                key="success"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-8 py-8 text-center"
-              >
-                <div className="relative">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", damping: 12, stiffness: 100, delay: 0.1 }}
-                    className="w-24 h-24 mx-auto bg-linear-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(52,211,153,0.4)]"
-                  >
-                    <Check className="w-12 h-12 text-white" />
-                  </motion.div>
-                </div>
-
-                <div className="space-y-2">
-                  <h2 className="text-3xl font-bold text-white">Bridged!</h2>
-                  <p className="text-white/60">
-                    {isReversed
-                      ?  `Successfully swapped ${amount} STRK to Bitcoin Network.`
-                      : `Successfully sent ${amount} BTC to Starknet Network.`}
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10 inline-flex items-center gap-3 mx-auto">
-                  <div className="text-left">
-                    <p className="text-xs text-white/40 uppercase tracking-wider">Transaction ID</p>
-                    <p className="text-sm text-white font-mono">{txId.slice(0, 6)}...{txId.slice(-4)}</p>
-                  </div>
-                  <a
-                    href={isReversed
-                      ? `https://sepolia.voyager.online/tx/${txId}`
-                      : `https://mempool.space/testnet4/tx/${txId}`
-                    }
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                </div>
-
-                <button
-                  onClick={resetFlow}
-                  className="w-full py-4 rounded-xl bg-white/10 text-white font-bold text-lg hover:bg-white/20 transition-colors"
+              {step === "success" && (
+                <motion.div
+                  key="success"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-8 py-8 text-center"
                 >
-                  Bridge More
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  <div className="relative">
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", damping: 12, stiffness: 100, delay: 0.1 }}
+                      className="w-24 h-24 mx-auto bg-linear-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(52,211,153,0.4)]"
+                    >
+                      <Check className="w-12 h-12 text-white" />
+                    </motion.div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h2 className="text-3xl font-bold text-white">Bridged!</h2>
+                    <p className="text-white/60">
+                      {isReversed
+                        ?  `Successfully swapped ${amount} STRK to Bitcoin Network.`
+                        : `Successfully sent ${amount} BTC to Starknet Network.`}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10 inline-flex items-center gap-3 mx-auto">
+                    <div className="text-left">
+                      <p className="text-xs text-white/40 uppercase tracking-wider">Transaction ID</p>
+                      <p className="text-sm text-white font-mono">{txId.slice(0, 6)}...{txId.slice(-4)}</p>
+                    </div>
+                    <a
+                      href={isReversed
+                        ? `https://sepolia.voyager.online/tx/${txId}`
+                        : `https://mempool.space/testnet4/tx/${txId}`
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
+
+                  <button
+                    onClick={resetFlow}
+                    className="w-full py-4 rounded-xl bg-white/10 text-white font-bold text-lg hover:bg-white/20 transition-colors"
+                  >
+                    Bridge More
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        <div className="w-full lg:w-100 shrink-0">
+          <div className="sticky top-24">
+            <SwapHistory
+              swaps={activeSwaps}
+              isLoading={isLoadingSwaps}
+              onSelectSwap={handleSelectSwap}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="w-full lg:w-100 shrink-0">
-        <div className="sticky top-24">
-          <SwapHistory
-            swaps={activeSwaps}
-            isLoading={isLoadingSwaps}
-            onSelectSwap={handleSelectSwap}
+      {/* Powered by Atomiq */}
+      <div className="flex items-center justify-center gap-2 mt-6 text-white/40">
+        <span className="text-sm">Powered by</span>
+        <div className="relative w-20 h-5">
+          <Image
+            src="/atomiq.svg"
+            alt="Atomiq"
+            fill
+            className="object-contain"
           />
         </div>
       </div>
