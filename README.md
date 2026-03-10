@@ -15,11 +15,11 @@
 
 Bitcoin holders face a painful choice:
 
-| Option                        | Challenge                                                  |
-| ----------------------------- | ---------------------------------------------------------- |
-| **Create a new wallet**       | Seed phrase management, lost keys, friction                |
-| **Cross-chain adaptation**    | Understanding Starknet, new learning curve                 |
-| **Multi-sig wrappers**        | Complexity, higher gas costs, coordination overhead        |
+| Option                     | Challenge                                           |
+| -------------------------- | --------------------------------------------------- |
+| **Create a new wallet**    | Seed phrase management, lost keys, friction         |
+| **Cross-chain adaptation** | Understanding Starknet, new learning curve          |
+| **Multi-sig wrappers**     | Complexity, higher gas costs, coordination overhead |
 
 **SatKey solves this**: Prove Bitcoin ownership without exposing the private key. Your users' Bitcoin wallet _becomes_ their Starknet identity.
 
@@ -103,7 +103,7 @@ Bitcoin holders face a painful choice:
 ### Step-by-Step
 
 1. **Connect Bitcoin Wallet**: User connects via Xverse or Leather (sats-connect)
-2. **Sign Authentication Message**: User signs a message with nonce + expiry (BIP-322 styled)
+2. **Sign Authentication Message**: User signs a message with nonce + expiry (plain ECDSA over Bitcoin Signed Message)
 3. **Generate ZK Proof**: Server generates proof verifying the ECDSA signature — **without seeing the private key**
 4. **Deploy Account**: Relayer deploys a deterministic Starknet account bound to the Bitcoin public key
 5. **Use Starknet**: User signs Starknet transactions with their Bitcoin wallet
@@ -211,6 +211,10 @@ Bitcoin holders face a painful choice:
 
 ## Technical Deep Dive
 
+### Testing Resources
+
+To get BTC on Testnet 4 for testing the application, visit [https://testnetbtc.com/](https://testnetbtc.com/).
+
 ### Frontend
 
 The frontend handles wallet connection and message signing.
@@ -219,7 +223,7 @@ The frontend handles wallet connection and message signing.
 
 - Uses `sats-connect` for Xverse/Leather compatibility
 - Extracts payment address (BIP-44, not ordinals/Taproot)
-- Signs BIP-322 styled auth message
+- Signs plain ECDSA secp256k1 auth message over a Bitcoin Signed Message hash
 
 **Auth Flow** (`ZkAuthFlow.tsx`):
 

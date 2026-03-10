@@ -41,7 +41,8 @@ User Wallet          Frontend                 Prover
     │ 1. Connect BTC     │                        │
     │◀───────────────────│                        │
     │                    │                        │
-    │ 2. Sign message    │                        │
+    │ 2. Sign message    │
+    │   (ECDSA)          │
     │   (BIP-322)        │                        │
     │───────────────────▶│                        │
     │                    │                        │
