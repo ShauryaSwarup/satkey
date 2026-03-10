@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Bitcoin-to-Starknet Identity Protocol</strong><br/>
-  One-click Bitcoin → Starknet. No seed phrase. No bridge friction.
+  One-click Bitcoin → Starknet. No seed phrase. Full sovereignty.
 </p>
 
 ---
@@ -15,11 +15,11 @@
 
 Bitcoin holders face a painful choice:
 
-| Option                  | Problem                                                    |
-| ----------------------- | ---------------------------------------------------------- |
-| **Create a new wallet** | Seed phrase management, lost keys, friction                |
-| **Use a bridge**        | Centralized custodians, long wait times, trust assumptions |
-| **Multi-sig wrappers**  | Complexity, higher gas costs, coordination overhead        |
+| Option                        | Challenge                                                  |
+| ----------------------------- | ---------------------------------------------------------- |
+| **Create a new wallet**       | Seed phrase management, lost keys, friction                |
+| **Cross-chain adaptation**    | Understanding Starknet, new learning curve                 |
+| **Multi-sig wrappers**        | Complexity, higher gas costs, coordination overhead        |
 
 **SatKey solves this**: Prove Bitcoin ownership without exposing the private key. Your users' Bitcoin wallet _becomes_ their Starknet identity.
 
@@ -29,9 +29,9 @@ Bitcoin holders face a painful choice:
 
 ### 🎯 The Moat / Unique Selling Proposition
 
-- **Zero-Knowledge Proofs**: Uses ZK to prove Bitcoin ownership without revealing the private key — a cryptographically provable solution, not a trust-based bridge
+- **Zero-Knowledge Proofs**: Uses ZK to prove Bitcoin ownership without revealing the private key — a cryptographically provable solution
 - **Deterministic Addresses**: Same Bitcoin key → same Starknet address. Every time. No randomness, no surprises
-- **Custody-Free**: No middlemen. No bridges to hack. Users own their assets
+- **Private Key Sovereignty**: Full control over your assets. No wrapped tokens, no intermediaries. Users own their assets
 - **Battle-Tested Stack**: Noir + Barretenberg for ZK, Garaga for on-chain verification, Starknet for execution
 
 ### For Users
@@ -50,6 +50,7 @@ Bitcoin holders face a painful choice:
 
 - **Bitcoin First**: Tap into the largest crypto user base without forcing wallet migration
 - **Unified Identity**: One key across chains — BTC for ownership, Starknet for execution
+- **Private Key Sovereignty**: Keep full control, no wrapped tokens, no custodians
 
 ---
 
@@ -188,7 +189,7 @@ Bitcoin holders face a painful choice:
 - Stake STRK directly from your SatKey account
 - Uses AVNU/StarkZap for permissionless staking
 - ZK proof-based authentication for all stake transactions
-- No need to bridge assets — stake directly from your SatKey account
+- Maintain full private key sovereignty while staking
 
 ---
 
