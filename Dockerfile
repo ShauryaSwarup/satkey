@@ -30,14 +30,14 @@ RUN bbup --version 3.0.0-nightly.20251104
 # Workspace
 WORKDIR /satkeyprover
 
-# Copy entire monorepo
+# Copy entire monorepo (needed for workspace structure)
 COPY . .
 
-# Install all workspace dependencies
-RUN pnpm install
+# Install only prover dependencies and shared-types
+RUN pnpm install --filter @satkey/prover --filter @satkey/shared-types
 
-# Build
-RUN pnpm build
+# Build only prover
+RUN pnpm build --filter @satkey/prover
 
 EXPOSE 3001
 
