@@ -75,14 +75,8 @@ const HeroContent: React.FC = () => {
                 {/* RIGHT SIDE: Video Container */}
                 <div className='absolute inset-0 lg:relative flex items-center justify-center lg:justify-end order-1 lg:order-2 self-center w-full pointer-events-none z-0'>
                     <div className='relative flex items-center justify-center overflow-hidden border border-white/10 rounded-3xl duration-700 hover:border-white/20 shadow-2xl w-full max-w-[320px] sm:max-w-[400px] lg:max-w-[450px] lg:max-h-[100vh] opacity-60 lg:opacity-100'>
-                        <video
-                            autoPlay
-                            loop
-                            muted
-                            playsInline
-                            className='w-full h-auto mix-blend-screen block'
-                        >
-                            <source src='/hero-bg.mp4' type='video/mp4' />
+                        <video autoPlay loop muted playsInline poster="/hero-bg-poster.webp">
+                            <source src="/hero-bg.webm" type="video/webm" />
                         </video>
                     </div>
                 </div>

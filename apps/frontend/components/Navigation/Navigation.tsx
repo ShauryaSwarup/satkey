@@ -41,7 +41,7 @@ const Navigation: React.FC = () => {
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2">
             <Image
-              src="/logo.png"
+              src="/logo.webp"
               alt="SatKey Logo"
               width={120}
               height={66}
